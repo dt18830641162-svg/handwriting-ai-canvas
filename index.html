@@ -1,0 +1,155 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>Handwriting AI Canvas iPad Prototype</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app" id="app">
+    <div class="stage" id="stage">
+      <svg id="inkLayer" aria-label="手写画布"></svg>
+      <svg id="arrowLayer" aria-label="上下文连接"></svg>
+      <div id="uiLayer" aria-label="AI 节点层"></div>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">AI</div>
+        <div>
+          <strong>可视化手写 Agent 画布</strong>
+          <div class="context-chip" id="modeReadout">钢笔 · 执行经理</div>
+        </div>
+      </div>
+      <div class="status">
+        <span class="status-dot"></span>
+        <span id="statusText">Apple Pencil / 触控已启用</span>
+      </div>
+    </header>
+
+    <aside class="floating-agents" aria-label="Agent 角色栏">
+      <button class="agent-row active" data-agent="assistant" style="--agent-color: var(--orange)">
+        <span class="agent-face">助</span><span class="agent-name">助理</span><span class="agent-badge">4</span>
+      </button>
+      <button class="agent-row" data-agent="tech" style="--agent-color: var(--blue)">
+        <span class="agent-face">技</span><span class="agent-name">技术</span><span class="agent-badge">2</span>
+      </button>
+      <button class="agent-row" data-agent="exec" style="--agent-color: var(--violet)">
+        <span class="agent-face">执</span><span class="agent-name">执行</span><span class="agent-badge">1</span>
+      </button>
+      <button class="agent-row" data-agent="knowledge" style="--agent-color: var(--green)">
+        <span class="agent-face">知</span><span class="agent-name">知识</span><span class="agent-badge">0</span>
+      </button>
+      <button class="agent-row" data-agent="product" style="--agent-color: var(--red)">
+        <span class="agent-face">产</span><span class="agent-name">产品</span><span class="agent-badge">0</span>
+      </button>
+      <button class="settings-btn" id="settingsBtn">设置</button>
+    </aside>
+
+    <section class="prompt-dock" aria-label="输入栏">
+      <div class="prompt-row">
+        <button id="voiceBtn" aria-label="语音输入">声</button>
+        <input id="typedPrompt" placeholder="打字输入，或直接在画布上手写" />
+        <button id="sendPrompt" aria-label="提交">↵</button>
+      </div>
+    </section>
+
+    <nav class="toolbar" aria-label="画布工具栏">
+      <button class="tool" data-tool="move" aria-label="移动">
+        <svg viewBox="0 0 32 32"><path d="M16 4v24"/><path d="M10 10l6-6 6 6"/><path d="M10 22l6 6 6-6"/><path d="M4 16h24"/><path d="M10 10L4 16l6 6"/><path d="M22 10l6 6-6 6"/></svg>
+        <span class="tip">移动</span>
+      </button>
+      <button class="tool active" data-tool="pen" aria-label="钢笔">
+        <svg viewBox="0 0 32 32"><path d="M18 4l7 7-12 17-6 1 1-6z"/><path d="M15 7l10 10"/></svg>
+        <span class="tip">钢笔</span>
+      </button>
+      <button class="tool" data-tool="ball" aria-label="圆珠笔">
+        <svg viewBox="0 0 32 32"><path d="M17 4l7 7-11 15-5 2 2-5z"/><path d="M21 8l3 3"/><path d="M8 28l4-4"/></svg>
+        <span class="tip">圆珠笔</span>
+      </button>
+      <button class="tool" data-tool="pencil" aria-label="铅笔">
+        <svg viewBox="0 0 32 32"><path d="M6 24l2 2 4-1L26 11l-5-5L7 20z"/><path d="M18 8l5 5"/></svg>
+        <span class="tip">铅笔</span>
+      </button>
+      <button class="tool" data-tool="marker" aria-label="马克笔">
+        <svg viewBox="0 0 32 32"><path d="M9 23l10-16 5 3-10 16z"/><path d="M7 27h12"/><path d="M8 22l6 4"/></svg>
+        <span class="tip">马克笔</span>
+      </button>
+      <button class="tool" data-tool="eraser" aria-label="橡皮">
+        <svg viewBox="0 0 32 32"><path d="M7 20l9-11 9 7-8 10H9z"/><path d="M13 13l9 7"/><path d="M5 27h20"/></svg>
+        <span class="tip">橡皮</span>
+      </button>
+      <span class="separator"></span>
+      <button class="tool" id="undoBtn" aria-label="撤销">
+        <svg viewBox="0 0 32 32"><path d="M12 10H6v6"/><path d="M7 10c4-5 15-5 18 3 2 6-3 12-10 12"/></svg>
+        <span class="tip">撤销</span>
+      </button>
+      <button class="tool" id="clearBtn" aria-label="清空手写">
+        <svg viewBox="0 0 32 32"><path d="M8 10h16"/><path d="M12 10V7h8v3"/><path d="M11 14l1 11h8l1-11"/></svg>
+        <span class="tip">清空手写</span>
+      </button>
+      <span class="color-dot" id="inkDot" style="background:#1f2529"></span>
+    </nav>
+
+    <div class="lasso-label" id="lassoPanel">
+      <textarea id="ocrText" placeholder="马克笔扫过的内容会在这里识别，可修正后调用 Agent"></textarea>
+      <div class="lasso-actions">
+        <button class="mini-btn primary" id="generateFromLasso">调用当前 Agent</button>
+        <button class="mini-btn" id="cancelLasso">取消</button>
+      </div>
+    </div>
+
+    <div class="scope-popover" id="scopePopover">
+      <h3>上下文作用域</h3>
+      <p id="scopeText">悬浮节点或箭头时显示模型会携带的上下文。</p>
+    </div>
+
+    <section class="settings-sheet" id="settingsSheet">
+      <h2>设置</h2>
+      <div class="settings-group">
+        <label class="field-label" for="apiProvider">供应商</label>
+        <select id="apiProvider" class="settings-input">
+          <option value="deepseek-proxy">DeepSeek 本地代理</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="custom">自定义</option>
+        </select>
+      </div>
+      <div class="settings-group">
+        <label class="field-label" for="apiEndpoint">API 地址</label>
+        <input id="apiEndpoint" class="settings-input" value="https://api.deepseek.com/chat/completions" autocomplete="off" />
+      </div>
+      <div class="settings-grid">
+        <div class="settings-group">
+          <label class="field-label" for="apiModel">模型</label>
+          <input id="apiModel" class="settings-input" value="deepseek-v4-pro" autocomplete="off" />
+        </div>
+        <div class="settings-group">
+          <label class="field-label" for="apiMode">协议</label>
+          <select id="apiMode" class="settings-input">
+            <option value="chat">Chat Completions</option>
+            <option value="responses">Responses</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-group">
+        <label class="field-label" for="apiKey">API Key</label>
+        <input id="apiKey" class="settings-input" type="password" placeholder="仅保存在本机浏览器" autocomplete="off" />
+      </div>
+      <button class="settings-save" id="saveApiSettings">保存 API 设置</button>
+      <label>自动 OCR 修正 <span class="toggle"></span></label>
+      <label>生成时保留手写来源 <span class="toggle"></span></label>
+      <label>剪枝后从记忆中移除 <span class="toggle"></span></label>
+      <label>Apple Pencil 压感笔迹 <span class="toggle"></span></label>
+    </section>
+
+    <div class="toast" id="toast"></div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
