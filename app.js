@@ -19,11 +19,8 @@
     const scopeText = document.getElementById("scopeText");
     const typedPrompt = document.getElementById("typedPrompt");
     const inkDot = document.getElementById("inkDot");
-    const apiProviderInput = document.getElementById("apiProvider");
-    const apiEndpointInput = document.getElementById("apiEndpoint");
-    const apiModelInput = document.getElementById("apiModel");
-    const apiModeInput = document.getElementById("apiMode");
-    const apiKeyInput = document.getElementById("apiKey");
+    const statusIndicator = document.getElementById("statusIndicator");
+    const statusLabel = document.getElementById("statusLabel");
 
     let activeTool = "pen";
     let activeAgent = "assistant";
@@ -39,67 +36,45 @@
     let lastLassoBox = null;
     let nodeId = 1;
     let linkId = 1;
+    let agentDragActive = false;
+    let agentDragAgent = null;
+    let agentDragStart = null;
+    let agentDragStarted = false;
+    let lassoDrawing = false;
+    let lassoPath = null;
+    let lassoPoints = [];
 
     const toolStyles = {
       pen: { color: "#1f2529", width: 3, opacity: 1 },
       ball: { color: "#315b88", width: 2.2, opacity: .92 },
       pencil: { color: "#5b5147", width: 2.8, opacity: .62 },
-      marker: { color: "#e4b72f", width: 12, opacity: .45 }
+      marker: { color: "#e4b72f", width: 12, opacity: .45 },
+      select: { color: "#2c7fb8", width: 2, opacity: .85 }
     };
 
-    const defaultApiConfig = {
-      provider: "deepseek-proxy",
-      endpoint: "/api/deepseek/chat/completions",
-      model: "deepseek-v4-pro",
-      mode: "chat",
-      key: ""
-    };
+    let serverOnline = false;
+    let serverProvider = "";
 
-    let apiConfig = loadApiConfig();
-
-    function loadApiConfig() {
+    async function checkHealth() {
       try {
-        return { ...defaultApiConfig, ...JSON.parse(localStorage.getItem("handwritingAiApi") || "{}") };
+        const resp = await fetch("/api/health");
+        const data = await resp.json();
+        serverOnline = data.status === "ok";
+        serverProvider = data.textProvider || "";
+        if (serverOnline) {
+          statusIndicator.className = "status-indicator online";
+          statusLabel.textContent = `已连接 · ${serverProvider}`;
+        } else {
+          statusIndicator.className = "status-indicator offline";
+          statusLabel.textContent = data.configured?.length
+            ? "服务未连接 · 请检查 Key"
+            : "未配置 Key · 模拟模式";
+        }
       } catch {
-        return { ...defaultApiConfig };
+        serverOnline = false;
+        statusIndicator.className = "status-indicator offline";
+        statusLabel.textContent = "服务未启动 · 模拟模式";
       }
-    }
-
-    function syncApiFields() {
-      apiProviderInput.value = apiConfig.provider;
-      apiEndpointInput.value = apiConfig.endpoint;
-      apiModelInput.value = apiConfig.model;
-      apiModeInput.value = apiConfig.mode;
-      apiKeyInput.value = apiConfig.key;
-    }
-
-    function applyProviderPreset(provider) {
-      if (provider === "deepseek-proxy") {
-        apiEndpointInput.value = "/api/deepseek/chat/completions";
-        apiModelInput.value = "deepseek-v4-pro";
-        apiModeInput.value = "chat";
-      }
-      if (provider === "deepseek") {
-        apiEndpointInput.value = "https://api.deepseek.com/chat/completions";
-        apiModelInput.value = "deepseek-v4-pro";
-        apiModeInput.value = "chat";
-      }
-      if (provider === "openai") {
-        apiEndpointInput.value = "https://api.openai.com/v1/responses";
-        apiModelInput.value = "gpt-4.1";
-        apiModeInput.value = "responses";
-      }
-    }
-
-    function normalizeEndpoint(endpoint, provider, mode) {
-      const clean = endpoint.trim().replace(/\/+$/, "");
-      if (provider === "deepseek-proxy") return "/api/deepseek/chat/completions";
-      if (provider === "deepseek") {
-        if (clean.endsWith("/anthropic")) return "https://api.deepseek.com/chat/completions";
-        if (clean === "https://api.deepseek.com") return "https://api.deepseek.com/chat/completions";
-        if (mode === "chat" && !clean.endsWith("/chat/completions")) return `${clean}/chat/completions`;
-      }
-      return clean;
     }
 
     function svgEl(tag, attrs = {}) {
@@ -145,7 +120,8 @@
         ball: "圆珠笔",
         pencil: "铅笔",
         marker: "马克笔",
-        eraser: "橡皮"
+        eraser: "橡皮",
+        select: "套索"
       }[activeTool];
       modeReadout.textContent = `${toolName} · ${agents[activeAgent].name}`;
       inkDot.style.background = toolStyles[activeTool]?.color || agents[activeAgent].color;
@@ -173,6 +149,19 @@
     }
 
     function beginInk(event) {
+      if (activeTool === "select") {
+        event.preventDefault();
+        if (event.target.closest(".node, .toolbar, .floating-agents, .prompt-dock, .lasso-label, .settings-sheet")) return;
+        lassoDrawing = true;
+        lassoPoints = [pointFromEvent(event)];
+        inkLayer.setPointerCapture?.(event.pointerId);
+        lassoPath = svgEl("path", {
+          d: "", fill: "rgba(44,127,184,.07)", stroke: "#2c7fb8",
+          "stroke-width": "2", "stroke-dasharray": "8 6", class: "lasso-path"
+        });
+        inkLayer.appendChild(lassoPath);
+        return;
+      }
       if (!["pen", "ball", "pencil", "marker", "eraser"].includes(activeTool)) return;
       if (event.target.closest(".node, .toolbar, .floating-agents, .prompt-dock, .lasso-label, .settings-sheet")) return;
 
@@ -198,6 +187,13 @@
     }
 
     function moveInk(event) {
+      if (lassoDrawing) {
+        event.preventDefault();
+        const point = pointFromEvent(event);
+        lassoPoints.push(point);
+        lassoPath.setAttribute("d", pathFromPoints(lassoPoints));
+        return;
+      }
       if (!drawing) return;
       event.preventDefault();
       const point = pointFromEvent(event);
@@ -216,6 +212,25 @@
     }
 
     function endInk(event) {
+      if (lassoDrawing) {
+        lassoDrawing = false;
+        inkLayer.releasePointerCapture?.(event.pointerId);
+        if (lassoPoints.length < 3) {
+          lassoPath?.remove(); lassoPath = null; lassoPoints = []; return;
+        }
+        const box = bbox(lassoPoints);
+        const selected = strokes.filter(s => s.tool !== "marker" && intersects(bbox(s.points), box));
+        if (selected.length === 0) {
+          lassoPath?.remove(); lassoPath = null; lassoPoints = [];
+          showToast("套索区域没有手写内容，请框选笔迹区域");
+          return;
+        }
+        const sel = { id: Date.now(), path: lassoPath, points: [...lassoPoints], box };
+        lassoSelections.push(sel);
+        openLassoPanelForStrokes(selected, box);
+        lassoPath = null; lassoPoints = [];
+        return;
+      }
       if (!drawing) return;
       drawing = false;
       inkLayer.releasePointerCapture?.(event.pointerId);
@@ -328,7 +343,7 @@
       showToast(`已框选 ${selected.length} 组笔迹，可修正识别结果后调用 ${agents[activeAgent].name}`);
     }
 
-    function openMarkerPanel(stroke, nodeIdFromMarker = null) {
+    async function openMarkerPanel(stroke, nodeIdFromMarker = null) {
       const box = bbox(stroke.points);
       const selected = nodeIdFromMarker
         ? [findNode(nodeIdFromMarker)].filter(Boolean).map(node => ({ source: node.source }))
@@ -342,7 +357,59 @@
       lassoPanel.style.top = `${Math.max(82, box.y)}px`;
       lastLassoBox = box;
       lassoPanel.dataset.nodeId = nodeIdFromMarker || "";
-      showToast(nodeIdFromMarker ? "已扫过 Agent 节点内容，可调用当前 Agent 继续生成" : "已扫过画布内容，可调用当前 Agent 搜索生成");
+      lassoPanel.dataset.fromSelect = "";
+
+      if (!nodeIdFromMarker && selected.length > 0) {
+        ocrText.value = "正在识别手写内容...";
+        ocrText.classList.add("ocr-loading");
+        try {
+          const imageDataUrl = renderStrokesToImage(selected, box);
+          const recognized = await ocrFromImage(imageDataUrl);
+          if (recognized && recognized.length > 0) {
+            ocrText.value = recognized;
+            showToast(`已识别手写内容，可调用 ${agents[activeAgent].name}`);
+          } else {
+            ocrText.value = guessed;
+            showToast("已扫过画布内容，可调用当前 Agent 搜索生成");
+          }
+        } catch {
+          ocrText.value = guessed;
+          showToast("已扫过画布内容，可调用当前 Agent 搜索生成");
+        } finally {
+          ocrText.classList.remove("ocr-loading");
+        }
+      } else {
+        showToast(nodeIdFromMarker ? "已扫过 Agent 节点内容，可调用当前 Agent 继续生成" : "已扫过画布内容，可调用当前 Agent 搜索生成");
+      }
+    }
+
+    async function openLassoPanelForStrokes(selected, box) {
+      const guessed = inferTextFromInk(selected, box);
+      ocrText.value = guessed;
+      lastLassoBox = box;
+      lassoPanel.style.display = "block";
+      lassoPanel.style.left = `${Math.min(window.innerWidth - 250, box.x + box.width + 16)}px`;
+      lassoPanel.style.top = `${Math.max(82, box.y)}px`;
+      lassoPanel.dataset.nodeId = "";
+      lassoPanel.dataset.fromSelect = "1";
+      ocrText.value = "正在识别手写内容...";
+      ocrText.classList.add("ocr-loading");
+      try {
+        const imageDataUrl = renderStrokesToImage(selected, box);
+        const recognized = await ocrFromImage(imageDataUrl);
+        if (recognized && recognized.length > 0) {
+          ocrText.value = recognized;
+          showToast(`套索识别完成，可调用 ${agents[activeAgent].name}`);
+        } else {
+          ocrText.value = guessed;
+          showToast(`已框选 ${selected.length} 组笔迹，可修正后调用 Agent`);
+        }
+      } catch {
+        ocrText.value = guessed;
+        showToast(`已框选 ${selected.length} 组笔迹，可修正后调用 Agent`);
+      } finally {
+        ocrText.classList.remove("ocr-loading");
+      }
     }
 
     function inferTextFromNodeMarker(nodeIdFromMarker) {
@@ -361,6 +428,59 @@
       const density = selected.length > 5 ? "多段手写内容" : "一段手写内容";
       const intent = box.width > box.height * 2 ? "横向问题" : "概念草稿";
       return `${density}：${intent}，需要调研并生成可操作结论`;
+    }
+
+    function renderStrokesToImage(strokes, box) {
+      const padding = 20;
+      const scale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(200, (box.width + padding * 2) * scale);
+      canvas.height = Math.max(60, (box.height + padding * 2) * scale);
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(scale, scale);
+      ctx.translate(-box.x + padding, -box.y + padding);
+      strokes.forEach(stroke => {
+        if (stroke.points.length < 2) return;
+        ctx.strokeStyle = "#1a1a1a";
+        ctx.lineWidth = Math.max((toolStyles[stroke.tool] || toolStyles.pen).width, 2.5);
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+        for (let i = 1; i < stroke.points.length - 1; i++) {
+          const mx = (stroke.points[i].x + stroke.points[i + 1].x) / 2;
+          const my = (stroke.points[i].y + stroke.points[i + 1].y) / 2;
+          ctx.quadraticCurveTo(stroke.points[i].x, stroke.points[i].y, mx, my);
+        }
+        const last = stroke.points[stroke.points.length - 1];
+        ctx.lineTo(last.x, last.y);
+        ctx.stroke();
+      });
+      return canvas.toDataURL("image/png");
+    }
+
+    async function ocrFromImage(imageDataUrl) {
+      try {
+        const response = await fetch("/api/ocr", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageDataUrl })
+        });
+        if (!response.ok) throw new Error(`${response.status}`);
+        const data = await response.json();
+        return (data.choices?.[0]?.message?.content || "").trim();
+      } catch (error) {
+        console.warn("OCR failed:", error.message);
+        return null;
+      }
+    }
+
+    function findStrokesNearPoint(point, radius = 40) {
+      return strokes.filter(stroke => {
+        return stroke.points.some(p => Math.hypot(p.x - point.x, p.y - point.y) < radius);
+      });
     }
 
     function generateFallbackContent(agentKey, source, mode = "initial", parents = []) {
@@ -397,12 +517,12 @@
     }
 
     async function resolveGeneratedContent(agentKey, source, mode, parents) {
-      if (!apiConfig.key.trim()) return generateFallbackContent(agentKey, source, mode, parents);
+      if (!serverOnline) return generateFallbackContent(agentKey, source, mode, parents);
       try {
         const text = await callModel(agentKey, source, mode, parents);
         return renderModelText(text, agentKey, source, mode, parents);
       } catch (error) {
-        showToast(`API 调用失败，已回退到本地模拟：${formatApiError(error)}`);
+        showToast(`API 调用失败，已回退到本地模拟：${error.message}`);
         return generateFallbackContent(agentKey, source, mode, parents);
       }
     }
@@ -420,38 +540,22 @@
         `用户内容：${source}`
       ].filter(Boolean).join("\n\n");
 
-      const endpoint = normalizeEndpoint(apiConfig.endpoint, apiConfig.provider, apiConfig.mode);
-      const headers = {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiConfig.key.trim()}`
-      };
-      const body = apiConfig.mode === "chat"
-        ? {
-          model: apiConfig.model.trim(),
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           messages: [
             { role: "system", content: "你是一个可视化白板中的 AI Agent，只输出节点内容。" },
             { role: "user", content: prompt }
           ]
-        }
-        : {
-          model: apiConfig.model.trim(),
-          input: prompt
-        };
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body)
+        })
       });
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `${response.status}`);
+      }
       const data = await response.json();
-      if (apiConfig.mode === "chat") return data.choices?.[0]?.message?.content || "";
-      return data.output_text || data.output?.[0]?.content?.[0]?.text || "";
-    }
-
-    function formatApiError(error) {
-      if (error instanceof TypeError) return "浏览器无法直连该 API，可能是跨域限制或网络不可达，需要后端代理";
-      return error.message || "未知错误";
+      return data.choices?.[0]?.message?.content || "";
     }
 
     function renderModelText(text, agentKey, source, mode, parents) {
@@ -788,12 +892,105 @@
       document.querySelectorAll(".node").forEach(el => el.classList.remove("context-active"));
     }
 
+    // ── Agent 拖拽连接 ──
+    const dragLayer = document.getElementById("dragLayer");
+
+    function showDragLine(from, to) {
+      dragLayer.innerHTML = "";
+      const line = svgEl("path", {
+        d: `M ${from.x} ${from.y} L ${to.x} ${to.y}`,
+        class: "drag-line"
+      });
+      const dot = svgEl("circle", { cx: to.x, cy: to.y, r: 5, class: "drag-dot" });
+      dragLayer.appendChild(line);
+      dragLayer.appendChild(dot);
+    }
+
+    function updateDragLine(to) {
+      const line = dragLayer.querySelector(".drag-line");
+      const dot = dragLayer.querySelector(".drag-dot");
+      if (!line || !dot) return;
+      const fromMatch = line.getAttribute("d").match(/M\s+([\d.]+)\s+([\d.]+)/);
+      if (!fromMatch) return;
+      const fromX = parseFloat(fromMatch[1]);
+      const fromY = parseFloat(fromMatch[2]);
+      line.setAttribute("d", `M ${fromX} ${fromY} L ${to.x} ${to.y}`);
+      dot.setAttribute("cx", to.x);
+      dot.setAttribute("cy", to.y);
+    }
+
+    function hideDragLine() {
+      dragLayer.innerHTML = "";
+    }
+
+    async function triggerOcrAndGenerate(strokes, box, agentKey) {
+      let recognized = inferTextFromInk(strokes, box);
+      if (serverOnline) {
+        try {
+          const imageDataUrl = renderStrokesToImage(strokes, box);
+          const result = await ocrFromImage(imageDataUrl);
+          if (result && result.length > 0) recognized = result;
+        } catch { /* fallback */ }
+      }
+      createNode({
+        x: box.x + box.width + 24,
+        y: box.y,
+        agentKey,
+        source: recognized,
+        mode: "initial",
+        parents: []
+      });
+    }
+
     document.querySelectorAll(".tool[data-tool]").forEach(button => {
       button.addEventListener("click", () => setTool(button.dataset.tool));
     });
 
     document.querySelectorAll(".agent-row").forEach(button => {
-      button.addEventListener("click", () => setAgent(button.dataset.agent));
+      button.addEventListener("click", () => {
+        if (agentDragStarted) return;
+        setAgent(button.dataset.agent);
+      });
+      button.addEventListener("pointerdown", event => {
+        if (event.button && event.button !== 0) return;
+        agentDragAgent = button.dataset.agent;
+        const rect = button.getBoundingClientRect();
+        agentDragStart = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        agentDragStarted = false;
+      });
+    });
+
+    window.addEventListener("pointermove", event => {
+      if (!agentDragAgent) return;
+      if (!agentDragStarted) {
+        const dx = event.clientX - agentDragStart.x;
+        const dy = event.clientY - agentDragStart.y;
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+        agentDragStarted = true;
+        setAgent(agentDragAgent);
+        showDragLine(agentDragStart, { x: event.clientX, y: event.clientY });
+        showToast(`拖拽 ${agents[agentDragAgent].name} 到手写区域释放，自动识别并生成`);
+      }
+      updateDragLine({ x: event.clientX, y: event.clientY });
+    });
+
+    window.addEventListener("pointerup", event => {
+      if (!agentDragAgent) return;
+      if (agentDragStarted) {
+        const point = pointFromEvent(event);
+        const nearby = findStrokesNearPoint(point, 48);
+        if (nearby.length > 0) {
+          const box = bbox(nearby.flatMap(s => s.points));
+          triggerOcrAndGenerate(nearby, box, agentDragAgent);
+          showToast(`${agents[agentDragAgent].name} 正在识别手写并生成节点`);
+        } else {
+          showToast("释放位置没有手写内容，请拖拽到手写笔迹上方释放");
+        }
+      }
+      hideDragLine();
+      agentDragAgent = null;
+      agentDragStart = null;
+      agentDragStarted = false;
     });
 
     inkLayer.addEventListener("pointerdown", beginInk);
@@ -809,6 +1006,18 @@
       }
     });
 
+    function closeLassoPanel() {
+      lassoPanel.style.display = "none";
+      lastLassoBox = null;
+      // 仅当面板由套索工具打开时才清除套索选择路径
+      if (lassoPanel.dataset.fromSelect === "1") {
+        const last = lassoSelections.pop();
+        if (last) last.path.remove();
+      }
+      lassoPanel.dataset.fromSelect = "";
+      lassoPanel.dataset.nodeId = "";
+    }
+
     document.getElementById("generateFromLasso").addEventListener("click", () => {
       if (!lastLassoBox) return;
       const parentNodeId = lassoPanel.dataset.nodeId || "";
@@ -821,16 +1030,10 @@
         mode: parent ? "derive" : "initial",
         parents: parent ? [parentNodeId] : []
       });
-      lassoPanel.style.display = "none";
-      lastLassoBox = null;
-      lassoPanel.dataset.nodeId = "";
+      closeLassoPanel();
     });
 
-    document.getElementById("cancelLasso").addEventListener("click", () => {
-      lassoPanel.style.display = "none";
-      lastLassoBox = null;
-      lassoPanel.dataset.nodeId = "";
-    });
+    document.getElementById("cancelLasso").addEventListener("click", closeLassoPanel);
 
     document.getElementById("sendPrompt").addEventListener("click", () => {
       const text = typedPrompt.value.trim();
@@ -849,26 +1052,9 @@
     });
 
     document.getElementById("settingsBtn").addEventListener("click", () => {
-      settingsSheet.style.display = settingsSheet.style.display === "block" ? "none" : "block";
-    });
-
-    apiProviderInput.addEventListener("change", () => {
-      applyProviderPreset(apiProviderInput.value);
-    });
-
-    document.getElementById("saveApiSettings").addEventListener("click", () => {
-      const provider = apiProviderInput.value;
-      const mode = apiModeInput.value;
-      apiConfig = {
-        provider,
-        endpoint: normalizeEndpoint(apiEndpointInput.value || defaultApiConfig.endpoint, provider, mode),
-        model: apiModelInput.value.trim() || defaultApiConfig.model,
-        mode,
-        key: apiKeyInput.value.trim()
-      };
-      syncApiFields();
-      localStorage.setItem("handwritingAiApi", JSON.stringify(apiConfig));
-      showToast(apiConfig.key ? "API 设置已保存，之后生成会调用模型" : "API 设置已保存；未填写 Key 时使用本地模拟");
+      const isOpen = settingsSheet.style.display === "block";
+      settingsSheet.style.display = isOpen ? "none" : "block";
+      if (!isOpen) checkHealth();
     });
 
     document.getElementById("undoBtn").addEventListener("click", () => {
@@ -925,7 +1111,7 @@
       document.querySelectorAll(".node").forEach(el => el.classList.remove("selected"));
     }
 
-    syncApiFields();
+    checkHealth();
     updateReadout();
     seedDemo();
     showToast("先用钢笔写字，再切到套索框选，调用右侧 Agent 生成节点");

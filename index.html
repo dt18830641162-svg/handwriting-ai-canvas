@@ -78,6 +78,10 @@
         <svg viewBox="0 0 32 32"><path d="M9 23l10-16 5 3-10 16z"/><path d="M7 27h12"/><path d="M8 22l6 4"/></svg>
         <span class="tip">马克笔</span>
       </button>
+      <button class="tool" data-tool="select" aria-label="套索">
+        <svg viewBox="0 0 32 32"><path d="M12 4c-4 0-8 2-8 6s4 6 9 8c-5 2-9 5-9 9 0 4 3 5 8 5h14V4H12z"/></svg>
+        <span class="tip">套索</span>
+      </button>
       <button class="tool" data-tool="eraser" aria-label="橡皮">
         <svg viewBox="0 0 32 32"><path d="M7 20l9-11 9 7-8 10H9z"/><path d="M13 13l9 7"/><path d="M5 27h20"/></svg>
         <span class="tip">橡皮</span>
@@ -109,43 +113,17 @@
 
     <section class="settings-sheet" id="settingsSheet">
       <h2>设置</h2>
-      <div class="settings-group">
-        <label class="field-label" for="apiProvider">供应商</label>
-        <select id="apiProvider" class="settings-input">
-          <option value="deepseek-proxy">DeepSeek 本地代理</option>
-          <option value="deepseek">DeepSeek</option>
-          <option value="openai">OpenAI</option>
-          <option value="custom">自定义</option>
-        </select>
+      <div class="settings-status" id="settingsStatus">
+        <span class="status-indicator" id="statusIndicator"></span>
+        <span id="statusLabel">正在检测服务...</span>
       </div>
-      <div class="settings-group">
-        <label class="field-label" for="apiEndpoint">API 地址</label>
-        <input id="apiEndpoint" class="settings-input" value="https://api.deepseek.com/chat/completions" autocomplete="off" />
-      </div>
-      <div class="settings-grid">
-        <div class="settings-group">
-          <label class="field-label" for="apiModel">模型</label>
-          <input id="apiModel" class="settings-input" value="deepseek-v4-pro" autocomplete="off" />
-        </div>
-        <div class="settings-group">
-          <label class="field-label" for="apiMode">协议</label>
-          <select id="apiMode" class="settings-input">
-            <option value="chat">Chat Completions</option>
-            <option value="responses">Responses</option>
-          </select>
-        </div>
-      </div>
-      <div class="settings-group">
-        <label class="field-label" for="apiKey">API Key</label>
-        <input id="apiKey" class="settings-input" type="password" placeholder="仅保存在本机浏览器" autocomplete="off" />
-      </div>
-      <button class="settings-save" id="saveApiSettings">保存 API 设置</button>
       <label>自动 OCR 修正 <span class="toggle"></span></label>
       <label>生成时保留手写来源 <span class="toggle"></span></label>
       <label>剪枝后从记忆中移除 <span class="toggle"></span></label>
       <label>Apple Pencil 压感笔迹 <span class="toggle"></span></label>
     </section>
 
+    <svg id="dragLayer" aria-hidden="true"></svg>
     <div class="toast" id="toast"></div>
   </main>
 
