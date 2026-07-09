@@ -44,30 +44,32 @@
     </section>
 
     <nav class="toolbar" aria-label="画布工具栏">
-      <button class="tool" data-tool="move" aria-label="移动">
-        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="1.5"/><path d="M12 2v7M12 15v7M2 12h7M15 12h7M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3"/></svg>
-        <span class="tip">移动</span>
+      <button class="tool tool-main active" data-tool="pen" aria-label="钢笔">
+        <img src="assets/icons/pen.svg" alt="钢笔" draggable="false" />
       </button>
-      <button class="tool active" data-tool="pen" aria-label="钢笔">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M16.5 3.5l4 4L9 19l-4.5.5L5 15z"/><path d="M13 7l4 4"/></svg>
-        <span class="tip">钢笔</span>
+      <button class="tool tool-main" data-tool="select" aria-label="套索">
+        <img src="assets/icons/lasso.svg" alt="套索" draggable="false" />
       </button>
-      <button class="tool" data-tool="select" aria-label="套索">
-        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.2"/></svg>
-        <span class="tip">套索</span>
+      <button class="tool tool-main" data-tool="eraser" aria-label="橡皮">
+        <img src="assets/icons/eraser.svg" alt="橡皮" draggable="false" />
       </button>
-      <button class="tool" data-tool="eraser" aria-label="橡皮">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M20 20H6.5L3 16.5l8.5-8.5 5.5 5.5z"/><path d="M9 10l5 5"/></svg>
-        <span class="tip">橡皮</span>
+
+      <span class="toolbar-divider"></span>
+
+      <button class="tool tool-main" data-tool="move" aria-label="移动画布">
+        <img src="assets/icons/hand-pan.svg" alt="移动" draggable="false" />
       </button>
-      <span class="separator"></span>
-      <button class="tool" id="undoBtn" aria-label="撤销">
+      <button class="tool tool-main" data-tool="cut" aria-label="裁剪箭头">
+        <img src="assets/icons/cut-scissors.svg" alt="裁剪" draggable="false" />
+      </button>
+      <button class="tool tool-main" data-tool="trash" aria-label="删除节点">
+        <img src="assets/icons/trash.svg" alt="删除" draggable="false" />
+      </button>
+
+      <span class="toolbar-divider"></span>
+
+      <button class="tool tool-func" id="undoBtn" aria-label="撤销">
         <svg viewBox="0 0 24 24" fill="none"><path d="M8 14L3 8l5-6"/><path d="M3 8h10a6 6 0 010 12h-3"/></svg>
-        <span class="tip">撤销</span>
-      </button>
-      <button class="tool" id="clearBtn" aria-label="清空手写">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4h8v2M5 6l1 14h12l1-14"/></svg>
-        <span class="tip">清空手写</span>
       </button>
       <span class="color-dot" id="inkDot" style="background:#1f2529"></span>
     </nav>
@@ -78,6 +80,13 @@
         <button class="mini-btn primary" id="generateFromLasso">调用当前 Agent</button>
         <button class="mini-btn" id="cancelLasso">取消</button>
       </div>
+    </div>
+
+    <!-- 文本选中 Agent 浮窗 -->
+    <div class="text-select-popup" id="textSelectPopup">
+      <div class="text-select-popup-header">选中文字，调用 Agent 继续生成</div>
+      <div id="textSelectAgentList" class="text-select-agent-list"><!-- JS 动态渲染 --></div>
+      <button class="mini-btn" id="cancelTextSelect">取消</button>
     </div>
 
     <div class="scope-popover" id="scopePopover">

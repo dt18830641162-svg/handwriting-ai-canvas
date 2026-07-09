@@ -66,6 +66,279 @@ Claude Code
 
 ### 完成内容：
 
+**修复 SVG 图标加载 — MIME 类型缺失（第 14 轮）：**
+
+**问题根因：**
+`server.js` 的 `mime` 映射表中缺少 `.svg` 条目，导致所有 SVG 图标以 `Content-Type: application/octet-stream` 返回。浏览器使用 `<img>` 标签加载 SVG 时，如果 MIME 类型不对，会拒绝渲染，显示为破图标。
+
+**修复：**
+在 `server.js` 的 `mime` 对象中添加：
+- `.svg`: `"image/svg+xml"`
+- `.png`: `"image/png"`
+
+**验证结果：**
+
+| 文件 | Content-Type |
+|------|-------------|
+| pen.svg | `image/svg+xml` ✅ |
+| lasso.svg | `image/svg+xml` ✅ |
+| eraser.svg | `image/svg+xml` ✅ |
+| hand-pan.svg | `image/svg+xml` ✅ |
+| cut-scissors.svg | `image/svg+xml` ✅ |
+| trash.svg | `image/svg+xml` ✅ |
+
+**图标路径（全部正确，无需修改）：**
+```
+assets/icons/pen.svg
+assets/icons/lasso.svg
+assets/icons/eraser.svg
+assets/icons/hand-pan.svg
+assets/icons/cut-scissors.svg
+assets/icons/trash.svg
+```
+
+**文件改动：**
+- `server.js`：`mime` 对象新增 `.svg` 和 `.png` 条目（+2 行）
+- `PROJECT_STATUS.md`：本文档
+
+**未修改：**
+- `.env`、`index.html`、`app.js`、`styles.css` — 无改动
+
+
+
+---
+
+### 工具：
+Claude Code
+
+### 完成内容：
+
+**工具栏 Icon 全面替换 + 剪刀/垃圾桶工具（第 13 轮）：**
+
+将底部工具栏全部替换为用户提供的 200×200 SVG icon，并新增两个专用工具：
+
+**Icon 映射：**
+
+| 文件 | 工具 | data-tool |
+|------|------|-----------|
+| `hand-pan.svg` | 移动画布（拖拽平移） | `move` |
+| `pen.svg` | 钢笔（手写绘制） | `pen` |
+| `lasso.svg` | 套索（框选 + OCR） | `select` |
+| `eraser.svg` | 橡皮（仅擦 strokes） | `eraser` |
+| `cut-scissors.svg` | 裁剪箭头连接 | `cut` |
+| `trash.svg` | 删除节点/内容框 | `trash` |
+
+**新增工具逻辑：**
+
+1. **剪刀工具（cut）**：
+   - 选择剪刀工具后，点击画布上的任意箭头 → `cutLink(id)` 删除该连接
+   - 不删除两端节点，只剪断箭头
+   - 箭头点击处理器中 `activeTool === "cut"` 时优先裁剪，否则打开编辑面板
+
+2. **垃圾桶工具（trash）**：
+   - 选择垃圾桶后，点击任意内容框 → `deleteNode(id)` 删除该节点
+   - `deleteNode` 同步清理关联的 `links[]`、DOM 元素、选中状态
+   - 在节点 click 处理器中最高优先级检查 `activeTool === "trash"`
+
+3. **橡皮擦职责确认**：
+   - 仍只擦除画布手写 strokes（`eraseAt`）
+   - 不触发节点删除（之前已移除捕获阶段 handler）
+
+**工具栏布局：**
+```
+[pen] [lasso] [eraser]  |  [hand-pan] [scissors] [trash]  |  [undo] [●]
+```
+
+**视觉改动：**
+- 所有 `.tool-main` 按钮 58×58px，`background: transparent`
+- `<img>` 高度 44px，`object-fit: contain`，完全透明背景
+- 选中态：底部蓝色短横线 `::after`，无大面积色块
+- 分隔线：1px `rgba(0,0,0,.07)`，26px 高
+- 移除了所有之前的 inline SVG 绘制工具图标
+
+**文件改动：**
+- `index.html`：工具栏完全重写，6 个 `<img>` 引用 SVG + undo + 颜色圆点
+- `styles.css`：新增 `.tool-main` 样式（58px 按钮 + img 44px），简化 `.tool-func`
+- `app.js`：`updateReadout` 新增 cut/trash、`setTool` 新增光标、箭头点击新增 cut 分支、节点点击新增 trash 分支
+- `PROJECT_STATUS.md`：本文档
+
+
+
+---
+
+### 工具：
+Claude Code
+
+### 完成内容：
+
+**工具栏图标去白底 — 替换为透明 SVG（第 12 轮）：**
+
+**问题根因：**
+`assets/icons/` 中的 PNG 参考图均为 color type=2（RGB，无 Alpha 通道），在页面中显示为带白色/浅色矩形背景的缩略图，无法实现透明工具效果。
+
+**修复：**
+将钢笔、套索、橡皮三个实物工具从 `<img src="...png">` 替换为 inline SVG，彻底消除白底：
+
+- **钢笔**：金属笔身（银灰渐变 + 中心高光）+ 深灰笔尖三角，`feDropShadow` 投影
+- **套索**：米白绳结路径 + 淡轮廓线 + 黄色锚点圆 + 连接线
+- **橡皮**：白色圆角主体 + 粉色橡皮头（`#f7b8bf` → `#e8929c` 渐变）+ 表面细纹理 + 高光
+
+**CSS 改动：**
+- `.tool-physical`：`background: transparent` 常态，hover 仅 `rgba(0,0,0,.02)`
+- 移除所有 `img` 相关样式，改为 `svg` 选择器
+- 选中态仅底部蓝色短横线 `::after`，无大面积色块
+- 无 `opacity`、`grayscale`、`mix-blend-mode` 等导致发灰的属性
+- SVG `overflow: visible` 确保投影不截断
+
+**验证：**
+- 工具栏 0 个 `<img>` 标签
+- 0 个 `grayscale`/`mix-blend-mode`/`opacity` 问题属性
+- 工具图标完全透明背景
+
+**文件改动：**
+- `index.html`：3 个 `<img>` → 3 个 inline SVG（含渐变和投影滤镜）
+- `styles.css`：`.tool-physical` 样式从 img 改为 svg，移除所有背景色块
+- `PROJECT_STATUS.md`：本文档
+
+
+
+---
+
+### 工具：
+Claude Code
+
+### 完成内容：
+
+**底部工具栏重做为 iPad 工具托盘（第 11 轮）：**
+
+将底部工具栏从"小圆形 icon 按钮栏"彻底重做为 iPad 手写 App 风格的工具托盘：
+
+**布局结构（三组 + 分隔线）：**
+```
+[ 移动 连接 ] | [ 钢笔 套索 橡皮 ] | [ 撤销 删除 ● ]
+  ← 功能键 →      ← 实物工具 →       ← 功能键 →
+```
+
+**实物工具（钢笔/套索/橡皮）：**
+- 按钮尺寸 54×62px，圆角 14px
+- PNG 图片高度 50px（约原图的 35%），`object-fit: contain`
+- 选中态：淡蓝色背景（`rgba(44,127,184,.08)`）+ 底部蓝色指示条
+- hover：图片 `scale(1.08)` + 微上移 + 加深阴影
+- 不再使用 `opacity` 或 `grayscale` 滤镜
+
+**功能按钮（移动/连接/撤销/删除）：**
+- 36×36px 圆形，SVG 21×21px
+- 浅灰色，hover 深色背景，active 更明显
+
+**托盘整体：**
+- 大圆角（24px）胶囊形，`min-height: 78px`
+- 米白背景 `rgba(252,251,248,.92)` + `backdrop-filter: blur(40px)`
+- 多层阴影（内高光 + 外阴影 + 描边）
+- 分隔线：1px 半透明竖线
+
+**文件改动：**
+- `index.html`：工具栏完全重构，新增 `.toolbar-group` 分组、`.toolbar-divider` 分隔线、工具分为 `.tool-func` 和 `.tool-physical` 两类
+- `styles.css`：删除旧 `.tool`/`.tool-icon-img`/`.separator` 样式，新增完整的托盘、分组、实物工具、功能按钮、分隔线样式
+- `PROJECT_STATUS.md`：本文档
+
+**未修改：**
+- `app.js` — `setTool()` 逻辑不变（仍通过 `.tool[data-tool]` 选择器 + `.active` class）
+- `.env`、`server.js` — 无改动
+
+
+
+---
+
+### 工具：
+Claude Code
+
+### 完成内容：
+
+**工具栏 Icon 替换为参考 PNG（第 10 轮）：**
+
+将钢笔、套索、橡皮三个工具图标从手绘 SVG 替换为用户提供的参考 PNG 图片：
+
+- `assets/icons/assets-icons-pen-ref.png`（钢笔，81×141px，金属笔尖）
+- `assets/icons/assets-icons-lasso-ref.png`（套索，77×157px，斜纹绳结）
+- `assets/icons/assets-icons-eraser-ref.png`（橡皮，64×133px，粉色橡皮头）
+
+图标通过 `<img class="tool-icon-img">` 嵌入工具栏按钮，CSS 统一控制：
+- 尺寸：24×24px，`object-fit: contain`
+- 默认：轻微 drop-shadow
+- hover：加深阴影 + 微暗
+- active 选中：更深阴影 + `brightness(.95)`
+
+移动、撤销、清空按钮保持原有 SVG 图标。
+
+**文件改动：**
+- `index.html`：钢笔/套索/橡皮按钮内 `<svg>` → `<img>` 指向 PNG 文件
+- `styles.css`：新增 `.tool-icon-img` 样式（尺寸、阴影、hover/active 状态）
+- `assets/icons/`：用户提供的 3 张 PNG 参考图
+
+**未修改：**
+- `.env`、`server.js`、`app.js` — 无改动
+
+
+
+---
+
+### 工具：
+Claude Code
+
+### 完成内容：
+
+**橡皮擦修复 + 文字选中二次生成 + Icon 重设计（第 9 轮）：**
+
+**问题一：橡皮擦逻辑修复**
+
+- 移除了 `installNodeEvents` 中 `activeTool === "eraser"` 时直接调用 `deleteNode()` 的捕获阶段 handler（L917-922）
+- 橡皮擦现在只能擦除画布上的自由手写笔迹（strokes），经过内容框区域不会触发节点删除
+- 每个内容框左上角新增删除按钮 `.node-delete-btn`（垃圾桶 SVG icon）
+- 删除按钮默认透明（`opacity: 0`），hover 或选中节点时淡入显示
+- 点击删除按钮 → `deleteNode(id)` → 同步清理节点 DOM、`nodes[]`、关联 `links[]`、选中状态
+
+**问题二：内容框文字选择 + 二次生成**
+
+- `.node-body` 设置为 `user-select: text`，支持鼠标/触控选中文字
+- `document.addEventListener("mouseup")` 检测选区是否在某个 `.node-body` 内
+- 有效选中后显示 Agent 选择浮窗 `#textSelectPopup`（固定定位，靠近选区位置）
+- 浮窗动态渲染所有可用 Agent，每个 Agent 显示其圆形头像 + 名称
+- 点击 Agent → 以选中文字为 `source`、当前节点为 `parents[0]`，调用 `createNode()` 生成新节点
+- 新节点与原节点自动建立箭头连接（类型默认 "derive"）
+- 取消按钮 / 点击空白处 → 关闭浮窗并清除选区
+- 不受文本选择影响：节点拖拽（pointerdown on .node-header）、连接器拖拽（pointerdown on .connector）、删除按钮（click on [data-action=delete]）
+
+**问题三：工具栏 Icon 重设计**
+
+钢笔 icon：金属笔尖造型，SVG linearGradient 深灰渐变，中心高光，斜切笔尖
+套索 icon：白色斜纹绳结形状，浅灰填充 + 描边，末端黄色圆点（套索锚点）
+橡皮擦 icon：白色圆角长方体主体 + 粉色橡皮头（`#f0a8b0`），表面细线纹理
+
+所有 icon 保持 inline SVG，24×24 viewBox，与底部悬浮工具栏风格统一。
+
+**文件改动：**
+- `app.js`：删除橡皮擦节点 handler、createNode 新增删除按钮 HTML、installNodeEvents 新增删除按钮事件、新增文本选中检测 + Agent 浮窗渲染逻辑
+- `index.html`：新增 `#textSelectPopup` 面板、钢笔/套索/橡皮 icon 替换
+- `styles.css`：新增 `.node-delete-btn`、`.text-select-popup`、`.text-select-agent-*` 样式、`.node-body` 设为 text 可选
+
+**未修改：**
+- `.env`、`server.js` — 无改动
+- 所有 API 端点、Agent 管理、连接系统保持正常
+
+**本地测试：**
+1. 橡皮擦：选橡皮工具 → 擦手写笔迹 ✓ 不删节点。hover 节点左上角出现垃圾桶 → 点击删除节点 ✓
+2. 文字选中：在节点正文区域拖选文字 → 弹出 Agent 浮窗 → 点 Agent → 新节点生成 + 箭头连接 ✓
+3. Icon：底部工具栏钢笔/套索/橡皮 icon 为新的渐变 SVG 风格 ✓
+
+
+
+---
+
+### 工具：
+Claude Code
+
+### 完成内容：
+
 **启动提示与环境检查优化（第 8 轮）：**
 
 1. **必需环境变量检查**：

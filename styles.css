@@ -461,6 +461,30 @@
       transform: translateY(1px);
     }
 
+    /* ── 节点删除按钮 ── */
+    .node-delete-btn {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border-radius: 5px;
+      color: #b0a89e;
+      background: transparent;
+      opacity: 0;
+      transition: opacity .15s, color .15s, background .15s;
+      flex-shrink: 0;
+    }
+
+    .node:hover .node-delete-btn,
+    .node.selected .node-delete-btn {
+      opacity: 1;
+    }
+
+    .node-delete-btn:hover {
+      color: #cc2d21;
+      background: rgba(204, 45, 33, .08);
+    }
+
     .node-body {
       padding: 12px 14px 10px;
       font-size: 13px;
@@ -468,6 +492,61 @@
       flex: 1;
       overflow-y: auto;
       overflow-x: hidden;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .node-body p,
+    .node-body li,
+    .node-body span {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    /* ── 文本选中 Agent 浮窗 ── */
+    .text-select-popup {
+      position: fixed;
+      z-index: 48;
+      display: none;
+      width: 200px;
+      padding: 10px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, .94);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 8px 28px rgba(0,0,0,.12), 0 0 0 1px rgba(0,0,0,.06);
+      pointer-events: auto;
+    }
+
+    .text-select-popup-header {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .text-select-agent-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-bottom: 8px;
+    }
+
+    .text-select-agent-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 7px;
+      text-align: left;
+      font-size: 13px;
+      color: #2c3135;
+      background: transparent;
+      transition: background .12s;
+    }
+
+    .text-select-agent-item:hover {
+      background: color-mix(in srgb, var(--agent-color) 10%, transparent);
     }
 
     .node-ink-layer {
@@ -609,90 +688,134 @@
       padding-left: 6px;
     }
 
+    /* ── iPad 风格底部工具托盘 ── */
     .toolbar {
       position: fixed;
       left: 50%;
-      bottom: max(22px, env(safe-area-inset-bottom));
+      bottom: max(20px, env(safe-area-inset-bottom));
       z-index: 34;
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 6px 8px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, .82);
-      backdrop-filter: blur(28px);
-      box-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 4px 24px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.05);
+      gap: 6px;
+      padding: 10px 22px;
+      border-radius: 26px;
+      background: rgba(252, 251, 248, .94);
+      backdrop-filter: blur(40px);
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,.05),
+        0 1px 0 rgba(255,255,255,.9) inset,
+        0 4px 8px rgba(0,0,0,.04),
+        0 14px 36px rgba(0,0,0,.10);
       transform: translateX(-50%);
       pointer-events: auto;
+      min-height: 74px;
+      user-select: none;
     }
 
-    .tool {
-      position: relative;
-      width: 42px;
-      height: 42px;
-      display: grid;
-      place-items: center;
-      border-radius: 50%;
-      color: #4a4f55;
+    /* ── 分隔线 ── */
+    .toolbar-divider {
+      width: 1px;
+      height: 26px;
+      margin: 0 6px;
+      background: rgba(0,0,0,.07);
+      border-radius: 1px;
+      flex-shrink: 0;
+    }
+
+    /* ── 主要工具按钮（img）── */
+    .tool-main {
+      width: 58px;
+      height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
       background: transparent;
-      transition: background .15s, color .15s, transform .1s;
+      border: 0;
+      cursor: pointer;
+      padding: 6px;
+      position: relative;
+      transition: background .15s;
     }
 
-    .tool:hover {
-      background: rgba(0,0,0,.04);
+    .tool-main img {
+      width: auto;
+      height: 44px;
+      max-width: 48px;
+      object-fit: contain;
+      display: block;
+      transition: transform .2s ease, filter .2s ease;
+      pointer-events: none;
     }
 
-    .tool:active {
+    .tool-main:hover {
+      background: rgba(0,0,0,.025);
+    }
+
+    .tool-main:hover img {
+      transform: scale(1.07);
+    }
+
+    .tool-main:active img {
       transform: scale(.94);
     }
 
-    .tool.active {
-      background: rgba(31, 37, 41, .09);
-      color: #1f2529;
+    .tool-main.active img {
+      transform: scale(1.05);
     }
 
-    .tool svg {
-      width: 22px;
-      height: 22px;
+    .tool-main.active::after {
+      content: "";
+      position: absolute;
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 18px;
+      height: 3px;
+      border-radius: 2px;
+      background: rgba(44,127,184,.45);
+    }
+
+    /* ── 小型功能按钮（撤销）── */
+    .tool-func {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      color: #6b6f75;
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      flex-shrink: 0;
+    }
+
+    .tool-func svg {
+      width: 20px;
+      height: 20px;
       stroke: currentColor;
-      stroke-width: 1.6;
+      stroke-width: 1.7;
       fill: none;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
 
-    .tool .tip {
-      position: absolute;
-      bottom: 52px;
-      left: 50%;
-      display: none;
-      padding: 5px 10px;
-      border-radius: 6px;
-      background: #2c3135;
-      color: #fff;
-      font-size: 11px;
-      font-weight: 500;
-      white-space: nowrap;
-      transform: translateX(-50%);
-      pointer-events: none;
+    .tool-func:hover {
+      background: rgba(0,0,0,.05);
+      color: #3a3d42;
     }
 
-    .tool:hover .tip {
-      display: block;
-    }
-
-    .separator {
-      width: 1px;
-      height: 34px;
-      background: rgba(80, 72, 62, .18);
-    }
-
+    /* ── 颜色圆点 ── */
     .color-dot {
-      width: 22px;
-      height: 22px;
+      width: 26px;
+      height: 26px;
       border-radius: 50%;
-      border: 2px solid rgba(255, 255, 255, .9);
-      box-shadow: 0 0 0 1px rgba(80, 72, 62, .2);
+      border: 2px solid rgba(255, 255, 255, .95);
+      box-shadow: 0 0 0 1.5px rgba(0,0,0,.12), 0 1px 3px rgba(0,0,0,.08);
+      flex-shrink: 0;
+      margin-left: 4px;
     }
 
     .prompt-dock {

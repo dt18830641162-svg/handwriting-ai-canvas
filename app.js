@@ -231,7 +231,7 @@
     }
 
     function updateReadout() {
-      const toolName = { move: "移动", pen: "钢笔", eraser: "橡皮", select: "套索", connect: "连接" }[activeTool] || activeTool;
+      const toolName = { move: "移动", pen: "钢笔", eraser: "橡皮", select: "套索", cut: "裁剪", trash: "删除" }[activeTool] || activeTool;
       modeReadout.textContent = `${toolName} · ${agents[activeAgent].name}`;
       inkDot.style.background = toolStyles[activeTool]?.color || agents[activeAgent].color;
     }
@@ -243,7 +243,7 @@
       });
       hideScope();
       document.querySelectorAll(".node").forEach(el => el.classList.toggle("move-enabled", tool === "move"));
-      app.style.cursor = tool === "move" ? "grab" : tool === "connect" ? "crosshair" : "";
+      app.style.cursor = tool === "move" ? "grab" : tool === "cut" ? "pointer" : tool === "trash" ? "pointer" : "";
       updateReadout();
     }
 
@@ -884,6 +884,9 @@
         <svg class="node-ink-layer" aria-label="节点笔迹层"></svg>
         <header class="node-header">
           <div class="node-title"><span class="agent-face">${agent.short}</span><span class="node-kind">${agent.name}</span></div>
+          <button class="node-delete-btn" data-action="delete" aria-label="删除节点" title="删除此节点">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M5 4V3h6v1M3 4l1 10h8l1-10"/></svg>
+          </button>
         </header>
         <div class="node-body">${loadingContent(agentKey, source, mode, parents)}</div>
         <button class="connector" data-action="connect" aria-label="拉线"></button>
@@ -914,13 +917,7 @@
       let nodeInkGlobalPoints = [];
       let start = null;
 
-      el.addEventListener("pointerdown", event => {
-        if (activeTool !== "eraser") return;
-        event.preventDefault();
-        event.stopPropagation();
-        deleteNode(el.dataset.id);
-      }, true);
-
+      // ── 钢笔在节点上绘制 ──
       el.addEventListener("pointerdown", event => {
         if (activeTool !== "pen") return;
         if (event.target.closest(".connector")) return;
@@ -1049,6 +1046,20 @@
       el.addEventListener("click", event => {
         const action = event.target.dataset.action;
         const id = el.dataset.id;
+
+        // ── 垃圾桶工具：删除节点 ──
+        if (activeTool === "trash") {
+          event.stopPropagation();
+          deleteNode(id);
+          return;
+        }
+
+        // ── 删除按钮 ──
+        if (action === "delete" || event.target.closest("[data-action='delete']")) {
+          event.stopPropagation();
+          deleteNode(id);
+          return;
+        }
 
         // ── 连接工具模式：点第一个节点 → 点第二个节点 → 创建箭头 ──
         if (activeTool === "connect") {
@@ -1228,6 +1239,10 @@
 
         hit.addEventListener("click", event => {
           event.stopPropagation();
+          if (activeTool === "cut") {
+            cutLink(link.id);
+            return;
+          }
           openArrowPanel(link, { x: event.clientX, y: event.clientY });
         });
         hit.addEventListener("pointerenter", event => {
@@ -1495,20 +1510,109 @@
       if (!isOpen) checkHealth();
     });
 
-    document.getElementById("undoBtn").addEventListener("click", () => {
-      const stroke = strokes.pop();
-      if (stroke) stroke.path.remove();
+    const undoEl = document.getElementById("undoBtn");
+    if (undoEl) {
+      undoEl.addEventListener("click", () => {
+        const stroke = strokes.pop();
+        if (stroke) stroke.path.remove();
+      });
+    }
+
+    const clearEl = document.getElementById("clearBtn");
+    if (clearEl) {
+      clearEl.addEventListener("click", () => {
+        strokes.forEach(stroke => stroke.path.remove());
+        lassoSelections.forEach(selection => selection.path.remove());
+        strokes = [];
+        lassoSelections = [];
+        lassoPanel.style.display = "none";
+        lastLassoBox = null;
+        lassoPanel.dataset.nodeId = "";
+        showToast("已清空手写层，AI 节点和上下文连接保留");
+      });
+    }
+
+    // ── 内容框文字选中 → 二次生成 ──
+    let textSelectSourceNodeId = null;
+    let textSelectSourceText = "";
+
+    function renderTextSelectAgents() {
+      const list = document.getElementById("textSelectAgentList");
+      if (!list) return;
+      list.innerHTML = Object.entries(agents).map(([key, agent]) => `
+        <button class="text-select-agent-item" data-agent="${key}" style="--agent-color: ${agent.color}">
+          <span class="agent-face">${agent.short}</span>
+          <span>${agent.name}</span>
+        </button>
+      `).join("");
+      document.querySelectorAll(".text-select-agent-item").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const agentKey = btn.dataset.agent;
+          document.getElementById("textSelectPopup").style.display = "none";
+          if (!textSelectSourceNodeId) return;
+          createNode({
+            x: findNode(textSelectSourceNodeId).x + 360,
+            y: findNode(textSelectSourceNodeId).y + 46,
+            agentKey,
+            source: textSelectSourceText,
+            mode: "derive",
+            parents: [textSelectSourceNodeId]
+          });
+          showToast(`${agents[agentKey].name} 正在基于选中文字生成`);
+          textSelectSourceNodeId = null;
+          textSelectSourceText = "";
+        });
+      });
+    }
+
+    document.addEventListener("mouseup", event => {
+      // 延迟检查，等浏览器完成选中
+      setTimeout(() => {
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+          // 没有有效选中文字，不处理
+          return;
+        }
+        const selectedText = sel.toString().trim();
+        if (selectedText.length < 2) return;
+
+        // 检查选区是否在某个节点内部
+        const anchorNode = sel.anchorNode;
+        const nodeEl = anchorNode?.parentElement?.closest?.(".node");
+        if (!nodeEl) return;
+        const nodeId = nodeEl.dataset.id;
+        if (!nodeId) return;
+
+        // 确保选区在 node-body 内部
+        if (!nodeEl.querySelector(".node-body")?.contains(anchorNode)) return;
+
+        textSelectSourceNodeId = nodeId;
+        textSelectSourceText = selectedText;
+
+        // 显示 Agent 选择浮窗
+        const popup = document.getElementById("textSelectPopup");
+        const range = sel.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        popup.style.display = "block";
+        popup.style.left = `${Math.min(rect.left + rect.width / 2 - 100, window.innerWidth - 230)}px`;
+        popup.style.top = `${Math.max(80, rect.bottom + 8)}px`;
+        renderTextSelectAgents();
+      }, 20);
     });
 
-    document.getElementById("clearBtn").addEventListener("click", () => {
-      strokes.forEach(stroke => stroke.path.remove());
-      lassoSelections.forEach(selection => selection.path.remove());
-      strokes = [];
-      lassoSelections = [];
-      lassoPanel.style.display = "none";
-      lastLassoBox = null;
-      lassoPanel.dataset.nodeId = "";
-      showToast("已清空手写层，AI 节点和上下文连接保留");
+    document.getElementById("cancelTextSelect").addEventListener("click", () => {
+      document.getElementById("textSelectPopup").style.display = "none";
+      textSelectSourceNodeId = null;
+      textSelectSourceText = "";
+      window.getSelection().removeAllRanges();
+    });
+
+    // 点击空白处关闭
+    document.addEventListener("pointerdown", event => {
+      const popup = document.getElementById("textSelectPopup");
+      if (popup.style.display === "block" && !popup.contains(event.target) && !event.target.closest(".node-body")) {
+        popup.style.display = "none";
+      }
     });
 
     window.addEventListener("resize", renderLinks);
