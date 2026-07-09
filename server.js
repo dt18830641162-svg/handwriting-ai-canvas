@@ -30,6 +30,19 @@ function loadEnv(filePath) {
 }
 loadEnv(path.join(__dirname, ".env"));
 
+// ── 启动前检查必需的环境变量 ──
+const MISSING_VARS = [];
+if (!process.env.DOUBAO_API_KEY) MISSING_VARS.push("DOUBAO_API_KEY");
+if (!process.env.DOUBAO_CHAT_MODEL) MISSING_VARS.push("DOUBAO_CHAT_MODEL");
+
+if (MISSING_VARS.length > 0) {
+  console.log("[InkScope] ⚠ 缺少以下环境变量：");
+  MISSING_VARS.forEach(v => console.log(`  - ${v}`));
+  console.log("  请在 .env 文件中配置，或复制 .env.example 为 .env 后填入值。");
+  console.log("  服务将以模拟模式运行（不调用真实 AI）。");
+  console.log("");
+}
+
 const root = __dirname;
 const port = Number(process.env.PORT || 8078);
 
@@ -219,17 +232,33 @@ function serveStatic(req, res) {
 }
 
 // ── 路由 ──
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
   if (req.method === "POST" && req.url === "/api/chat") return handleChat(req, res);
   if (req.method === "POST" && req.url === "/api/ocr") return handleOcr(req, res);
   if (req.method === "POST" && req.url === "/api/config") return handleConfig(req, res);
   if (req.method === "GET" && req.url === "/api/health") return handleHealth(req, res);
   serveStatic(req, res);
-}).listen(port, "0.0.0.0", () => {
+});
+
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.log(`[InkScope] ✕ 端口 ${port} 已被占用，请先执行：`);
+    console.log("  taskkill /F /IM node.exe");
+    console.log("  然后重新运行 node server.js");
+    process.exit(1);
+  }
+  throw err;
+});
+
+server.listen(port, "0.0.0.0", () => {
   const provider = getProvider();
-  console.log(`InkScope: http://localhost:${port}/`);
-  console.log(`  豆包 API: ${provider ? "已配置 (" + provider.chatModel + ")" : "未配置"}`);
-  if (!provider) {
-    console.log("  提示: 在页面设置中填入 API Key 和接入点名称，或复制 .env.example 为 .env");
+  console.log(`[InkScope] 服务已启动: http://localhost:${port}/`);
+  if (provider) {
+    console.log(`  豆包 API: 已连接 · 模型 ${provider.chatModel}`);
+  } else {
+    console.log("  豆包 API: 未配置（模拟模式）");
+    if (MISSING_VARS.length > 0) {
+      console.log(`  缺失变量: ${MISSING_VARS.join(", ")}`);
+    }
   }
 });

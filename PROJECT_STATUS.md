@@ -66,6 +66,51 @@ Claude Code
 
 ### 完成内容：
 
+**启动提示与环境检查优化（第 8 轮）：**
+
+1. **必需环境变量检查**：
+   - `loadEnv()` 执行后立即检查 `DOUBAO_API_KEY` 和 `DOUBAO_CHAT_MODEL`
+   - 缺失时打印清晰的变量名列表和配置指引
+   - 提示"服务将以模拟模式运行"，不阻塞启动
+
+2. **端口占用友好处理**：
+   - `server.on("error")` 捕获 `EADDRINUSE`
+   - 打印明确的解决命令：`taskkill /F /IM node.exe`
+   - 使用 `process.exit(1)` 退出而非崩溃抛错
+
+3. **启动输出格式统一**：
+   - `[InkScope] ⚠` 警告前缀、`[InkScope] ✕` 错误前缀
+   - 正常启动：显示服务地址 + 模型名称
+   - 模拟模式：显示缺失变量名列表
+
+**启动输出示例：**
+```
+[InkScope] 已从 .env 加载 6 个环境变量
+[InkScope] 服务已启动: http://localhost:8078/
+  豆包 API: 已连接 · 模型 ep-xxx
+```
+端口占用时：
+```
+[InkScope] ✕ 端口 8078 已被占用，请先执行：
+  taskkill /F /IM node.exe
+  然后重新运行 node server.js
+```
+
+**文件改动：**
+- `server.js`：新增 `MISSING_VARS` 检查块、`server.on("error")` 处理器、统一启动日志格式
+
+**未修改：**
+- `.env`、`index.html`、`app.js`、`styles.css` — 无改动
+
+
+
+---
+
+### 工具：
+Claude Code
+
+### 完成内容：
+
 **修复 .env 环境变量加载（第 7 轮）：**
 
 **问题根因：**
