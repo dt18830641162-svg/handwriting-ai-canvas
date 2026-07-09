@@ -12,7 +12,7 @@ InkScope 是一个基于手写交互的 AI Canvas 原型系统。
 在线 Demo：
 
 ```text
-[你的 Render 在线链接](https://inkscope.onrender.com/)
+[(https://inkscope.onrender.com/)]
 ```
 
 建议使用桌面浏览器或 iPad 浏览器打开。  
