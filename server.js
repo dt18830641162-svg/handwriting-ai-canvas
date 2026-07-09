@@ -4,8 +4,15 @@ const path = require("path");
 
 // ── 加载 .env ──
 function loadEnv(filePath) {
-  if (!fs.existsSync(filePath)) return;
-  const lines = fs.readFileSync(filePath, "utf-8").split(/\r?\n/);
+  if (!fs.existsSync(filePath)) {
+    console.log("[InkScope] .env 文件未找到:", filePath);
+    return;
+  }
+  const content = fs.readFileSync(filePath, "utf-8");
+  // 处理可能的 UTF-8 BOM
+  const clean = content.charCodeAt(0) === 0xFEFF ? content.slice(1) : content;
+  const lines = clean.split(/\r?\n/);
+  let count = 0;
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
@@ -13,69 +20,61 @@ function loadEnv(filePath) {
     if (eqIdx === -1) continue;
     const key = trimmed.slice(0, eqIdx).trim();
     const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
-    if (!process.env[key]) process.env[key] = val;
+    // 只在环境变量未设置时才从 .env 加载（不覆盖系统环境变量）
+    if (!process.env[key]) {
+      process.env[key] = val;
+      count++;
+    }
   }
+  console.log(`[InkScope] 已从 .env 加载 ${count} 个环境变量`);
 }
 loadEnv(path.join(__dirname, ".env"));
 
 const root = __dirname;
 const port = Number(process.env.PORT || 8078);
 
-// ── 服务商定义 ──
-// 每个服务商只需 API Key 和接入点地址，模型名有默认值
-const PROVIDER_DEFAULTS = {
-  openai: {
-    baseUrl: "https://api.openai.com/v1",
-    chatModel: "gpt-4.1",
-    ocrModel: "gpt-4o",
-  },
-  deepseek: {
-    baseUrl: "https://api.deepseek.com",
-    chatModel: "deepseek-v4-pro",
-    ocrModel: "deepseek-v4-pro",
-  },
-  doubao: {
-    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
-    chatModel: "doubao-pro-32k",
-    ocrModel: "doubao-pro-32k",
-  },
+// 运行时配置（由前端 /api/config 设置，优先级高于 .env）
+let runtimeConfig = {
+  apiKey: "",
+  endpoint: "",  // 接入点名称，用作 model
 };
 
-function buildProvider(name) {
-  const def = PROVIDER_DEFAULTS[name];
-  if (!def) return null;
-  const prefix = name.toUpperCase();
-  const key = process.env[`${prefix}_API_KEY`] || "";
-  if (!key) return null;
-  const baseUrl = process.env[`${prefix}_BASE_URL`] || def.baseUrl;
-  return {
-    key,
-    chatEndpoint: baseUrl.replace(/\/+$/, "") + "/chat/completions",
-    chatModel: process.env[`${prefix}_CHAT_MODEL`] || def.chatModel,
-    ocrEndpoint: baseUrl.replace(/\/+$/, "") + "/chat/completions",
-    ocrModel: process.env[`${prefix}_OCR_MODEL`] || def.ocrModel,
-  };
-}
-
-// 尝试顺序：环境变量指定 → 第一个可用的
-function resolveProvider(preferred) {
-  if (preferred) {
-    const p = buildProvider(preferred);
-    if (p) return { name: preferred, ...p };
+function getProvider() {
+  // 优先使用运行时配置（开发者模式）
+  if (runtimeConfig.apiKey && runtimeConfig.endpoint) {
+    return {
+      name: "doubao",
+      key: runtimeConfig.apiKey,
+      chatEndpoint: (process.env.DOUBAO_BASE_URL || "https://ark.cn-beijing.volces.com/api/v3") + "/chat/completions",
+      chatModel: runtimeConfig.endpoint,
+      ocrEndpoint: (process.env.DOUBAO_BASE_URL || "https://ark.cn-beijing.volces.com/api/v3") + "/chat/completions",
+      ocrModel: runtimeConfig.endpoint,
+    };
   }
-  for (const name of Object.keys(PROVIDER_DEFAULTS)) {
-    const p = buildProvider(name);
-    if (p) return { name, ...p };
+  // 从 .env 读取配置
+  const envKey = process.env.DOUBAO_API_KEY || "";
+  const chatModel = process.env.DOUBAO_CHAT_MODEL || "";
+  const ocrModel = process.env.DOUBAO_OCR_MODEL || chatModel;
+  if (envKey && chatModel) {
+    const baseUrl = process.env.DOUBAO_BASE_URL || "https://ark.cn-beijing.volces.com/api/v3";
+    return {
+      name: "doubao",
+      key: envKey,
+      chatEndpoint: baseUrl + "/chat/completions",
+      chatModel: chatModel,
+      ocrEndpoint: baseUrl + "/chat/completions",
+      ocrModel: ocrModel,
+    };
   }
   return null;
 }
 
 function getTextProvider() {
-  return resolveProvider(process.env.DEFAULT_TEXT_PROVIDER || "");
+  return getProvider();
 }
 
 function getOcrProvider() {
-  return resolveProvider(process.env.DEFAULT_OCR_PROVIDER || "");
+  return getProvider();
 }
 
 // ── MIME ──
@@ -173,19 +172,31 @@ async function handleOcr(req, res) {
   }
 }
 
+// ── /api/config — 运行时设置 API 配置 ──
+async function handleConfig(req, res) {
+  try {
+    const raw = await readBody(req);
+    const { apiKey, endpoint } = JSON.parse(raw);
+    if (apiKey) runtimeConfig.apiKey = apiKey;
+    if (endpoint) runtimeConfig.endpoint = endpoint;
+    send(res, 200, JSON.stringify({ ok: true }), "application/json; charset=utf-8");
+  } catch (error) {
+    send(res, 400, JSON.stringify({ error: error.message }), "application/json; charset=utf-8");
+  }
+}
+
 // ── /api/health — 健康检查 ──
 function handleHealth(req, res) {
-  const text = getTextProvider();
-  const ocr = getOcrProvider();
-  const configured = Object.keys(PROVIDER_DEFAULTS)
-    .filter(name => !!process.env[`${name.toUpperCase()}_API_KEY`]);
+  const provider = getProvider();
+  const configured = !!(runtimeConfig.apiKey || process.env.DOUBAO_API_KEY);
 
   send(res, 200, JSON.stringify({
-    status: text ? "ok" : "no_key",
-    textProvider: text ? text.name : null,
-    ocrProvider: ocr ? ocr.name : null,
-    configured,
-    demo: !text
+    status: provider ? "ok" : "no_key",
+    textProvider: provider ? "doubao" : null,
+    ocrProvider: provider ? "doubao" : null,
+    configured: configured ? ["doubao"] : [],
+    demo: !provider,
+    devSettingsEnabled: process.env.ENABLE_DEV_SETTINGS === "true"
   }), "application/json; charset=utf-8");
 }
 
@@ -211,15 +222,14 @@ function serveStatic(req, res) {
 http.createServer((req, res) => {
   if (req.method === "POST" && req.url === "/api/chat") return handleChat(req, res);
   if (req.method === "POST" && req.url === "/api/ocr") return handleOcr(req, res);
+  if (req.method === "POST" && req.url === "/api/config") return handleConfig(req, res);
   if (req.method === "GET" && req.url === "/api/health") return handleHealth(req, res);
   serveStatic(req, res);
 }).listen(port, "0.0.0.0", () => {
-  const text = getTextProvider();
+  const provider = getProvider();
   console.log(`InkScope: http://localhost:${port}/`);
-  console.log(`  文本服务: ${text ? text.name + " (" + text.chatModel + ")" : "未配置"}`);
-  const ocr = getOcrProvider();
-  console.log(`  OCR 服务: ${ocr ? ocr.name + " (" + ocr.ocrModel + ")" : "未配置"}`);
-  if (!text) {
-    console.log("  提示: 复制 .env.example 为 .env 并填入 API Key");
+  console.log(`  豆包 API: ${provider ? "已配置 (" + provider.chatModel + ")" : "未配置"}`);
+  if (!provider) {
+    console.log("  提示: 在页面设置中填入 API Key 和接入点名称，或复制 .env.example 为 .env");
   }
 });
