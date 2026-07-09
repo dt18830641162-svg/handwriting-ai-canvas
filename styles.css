@@ -27,12 +27,7 @@
       overflow: hidden;
       color: var(--ink);
       font-family: ui-rounded, "SF Pro Rounded", "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
-      background:
-        linear-gradient(90deg, rgba(60, 75, 90, .045) 1px, transparent 1px),
-        linear-gradient(0deg, rgba(60, 75, 90, .045) 1px, transparent 1px),
-        radial-gradient(circle at 30% 20%, rgba(228, 183, 47, .08), transparent 28%),
-        var(--paper);
-      background-size: 32px 32px, 32px 32px, auto, auto;
+      background: #f6f4ef;
     }
 
     button,
@@ -128,6 +123,11 @@
       position: absolute;
       inset: 0;
       transform-origin: 0 0;
+      background:
+        linear-gradient(90deg, rgba(0,0,0,.028) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(0,0,0,.028) 1px, transparent 1px);
+      background-size: 24px 24px;
+      background-position: -1px -1px;
     }
 
     #inkLayer,
@@ -211,10 +211,178 @@
       background: #1f2529;
     }
 
+    .mini-btn.danger {
+      color: #cc2d21;
+      border-color: rgba(204, 45, 33, .3);
+      background: rgba(204, 45, 33, .06);
+    }
+
+    /* ── 箭头编辑面板 ── */
+    .arrow-edit-panel {
+      position: fixed;
+      z-index: 45;
+      display: none;
+      width: 200px;
+      padding: 10px;
+      border: 1px solid rgba(80, 72, 62, .18);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .94);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+      pointer-events: auto;
+    }
+
+    .arrow-edit-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #2c3135;
+    }
+
+    .close-btn {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 5px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .close-btn:hover {
+      background: rgba(0, 0, 0, .06);
+    }
+
+    .arrow-type-select {
+      width: 100%;
+      height: 32px;
+      margin-bottom: 8px;
+      border: 1px solid rgba(80, 72, 62, .18);
+      border-radius: 6px;
+      padding: 0 8px;
+      background: #fffdf9;
+      color: var(--ink);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .arrow-edit-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* ── 箭头文字标签 ── */
+    .arrow-label {
+      pointer-events: none;
+      user-select: none;
+      paint-order: stroke;
+      stroke: rgba(255, 255, 255, .85);
+      stroke-width: 3;
+    }
+
+    /* ── Agent 列表 ── */
+    #agentList {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .agent-edit-btn {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity .15s;
+    }
+
+    .agent-row:hover .agent-edit-btn {
+      opacity: 1;
+    }
+
+    .agent-edit-btn:hover {
+      background: rgba(0, 0, 0, .08);
+      color: var(--ink);
+    }
+
+    /* ── Agent 编辑面板 ── */
+    .agent-edit-panel {
+      position: fixed;
+      left: 196px;
+      top: 50%;
+      z-index: 44;
+      display: none;
+      width: 280px;
+      padding: 14px;
+      border: 1px solid rgba(80, 72, 62, .18);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .94);
+      backdrop-filter: blur(22px);
+      box-shadow: var(--shadow);
+      pointer-events: auto;
+      max-height: calc(100vh - 140px);
+      overflow-y: auto;
+    }
+
+    .agent-edit-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .agent-edit-header h3 {
+      margin: 0;
+      font-size: 15px;
+      color: #2c3135;
+    }
+
+    .agent-edit-field {
+      display: grid;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+
+    .agent-edit-field label {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .agent-edit-field input,
+    .agent-edit-field textarea {
+      width: 100%;
+      border: 1px solid rgba(80, 72, 62, .18);
+      border-radius: 6px;
+      padding: 6px 8px;
+      background: #fffdf9;
+      color: var(--ink);
+      font-size: 13px;
+      outline: none;
+      resize: vertical;
+    }
+
+    .agent-edit-field input[type="color"] {
+      height: 32px;
+      padding: 2px 4px;
+      cursor: pointer;
+    }
+
+    .agent-edit-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
     .node {
       position: absolute;
       width: 300px;
-      min-height: 172px;
+      max-height: 420px;
       border: 2px solid var(--agent-color);
       border-radius: 8px;
       background: color-mix(in srgb, var(--agent-color) 7%, white);
@@ -222,6 +390,8 @@
       pointer-events: auto;
       touch-action: none;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
     .node.move-enabled {
@@ -295,6 +465,9 @@
       padding: 12px 14px 10px;
       font-size: 13px;
       line-height: 1.55;
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
 
     .node-ink-layer {
@@ -371,29 +544,34 @@
 
     .floating-agents {
       position: fixed;
-      top: 96px;
-      right: max(20px, env(safe-area-inset-right));
+      left: max(16px, env(safe-area-inset-left));
+      top: 50%;
       z-index: 32;
-      width: 150px;
-      padding: 12px;
-      border: 1px solid rgba(80, 72, 62, .18);
+      width: 164px;
+      padding: 10px 8px;
       border-radius: 18px;
-      background: rgba(255, 255, 255, .78);
+      background: rgba(255, 255, 255, .82);
       backdrop-filter: blur(28px);
-      box-shadow: var(--shadow);
+      box-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 4px 24px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.05);
+      transform: translateY(-50%);
       pointer-events: auto;
     }
 
     .agent-row {
       display: grid;
-      grid-template-columns: 24px 1fr auto;
+      grid-template-columns: 24px 1fr auto auto;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       width: 100%;
       min-height: 40px;
-      border-radius: 8px;
-      padding: 5px 4px;
+      border-radius: 10px;
+      padding: 5px 6px;
       text-align: left;
+      transition: background .15s;
+    }
+
+    .agent-row:hover {
+      background: rgba(0,0,0,.03);
     }
 
     .agent-row.active {
@@ -401,9 +579,12 @@
     }
 
     .agent-name {
-      font-size: 16px;
-      font-weight: 760;
+      font-size: 13px;
+      font-weight: 700;
       color: #2c3135;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .agent-badge {
@@ -431,41 +612,50 @@
     .toolbar {
       position: fixed;
       left: 50%;
-      bottom: max(18px, env(safe-area-inset-bottom));
+      bottom: max(22px, env(safe-area-inset-bottom));
       z-index: 34;
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-      border: 1px solid rgba(80, 72, 62, .17);
+      gap: 4px;
+      padding: 6px 8px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, .76);
-      backdrop-filter: blur(30px);
-      box-shadow: 0 22px 54px rgba(50, 43, 36, .18);
+      background: rgba(255, 255, 255, .82);
+      backdrop-filter: blur(28px);
+      box-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 4px 24px rgba(0,0,0,.08), 0 0 0 1px rgba(0,0,0,.05);
       transform: translateX(-50%);
       pointer-events: auto;
     }
 
     .tool {
       position: relative;
-      width: 48px;
-      height: 48px;
+      width: 42px;
+      height: 42px;
       display: grid;
       place-items: center;
       border-radius: 50%;
-      color: #252b2f;
+      color: #4a4f55;
       background: transparent;
+      transition: background .15s, color .15s, transform .1s;
+    }
+
+    .tool:hover {
+      background: rgba(0,0,0,.04);
+    }
+
+    .tool:active {
+      transform: scale(.94);
     }
 
     .tool.active {
-      background: rgba(31, 37, 41, .08);
+      background: rgba(31, 37, 41, .09);
+      color: #1f2529;
     }
 
     .tool svg {
-      width: 28px;
-      height: 28px;
+      width: 22px;
+      height: 22px;
       stroke: currentColor;
-      stroke-width: 2;
+      stroke-width: 1.6;
       fill: none;
       stroke-linecap: round;
       stroke-linejoin: round;
@@ -473,16 +663,18 @@
 
     .tool .tip {
       position: absolute;
-      bottom: 58px;
+      bottom: 52px;
       left: 50%;
       display: none;
-      padding: 5px 8px;
+      padding: 5px 10px;
       border-radius: 6px;
-      background: #202529;
+      background: #2c3135;
       color: #fff;
       font-size: 11px;
+      font-weight: 500;
       white-space: nowrap;
       transform: translateX(-50%);
+      pointer-events: none;
     }
 
     .tool:hover .tip {
@@ -565,6 +757,23 @@
       opacity: .85;
     }
 
+    /* ── 连接拖拽线 ── */
+    .connector-drag-line {
+      fill: none;
+      stroke: #4a6071;
+      stroke-width: 2.2;
+      stroke-dasharray: 8 5;
+      stroke-linecap: round;
+      opacity: .8;
+      pointer-events: none;
+    }
+
+    .connector-drag-dot {
+      fill: #4a6071;
+      opacity: .9;
+      pointer-events: none;
+    }
+
     .lasso-path {
       fill: rgba(44, 127, 184, .07);
       stroke: #2c7fb8;
@@ -634,9 +843,10 @@
 
     .settings-sheet {
       position: fixed;
-      right: max(20px, env(safe-area-inset-right));
-      top: 330px;
+      left: 200px;
+      top: 50%;
       z-index: 42;
+      transform: translateY(-50%);
       display: none;
       width: 280px;
       padding: 14px;
@@ -726,15 +936,66 @@
       font-size: 12px;
     }
 
-    .settings-sheet label {
+    .settings-hint {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .settings-section-title {
+      padding: 10px 0 4px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+    }
+
+    .toggle-row {
       display: grid;
       grid-template-columns: 1fr auto;
       align-items: center;
       gap: 12px;
       padding: 9px 0;
-      border-top: 1px solid rgba(80, 72, 62, .12);
+      border-top: 1px solid rgba(80, 72, 62, .1);
       color: #3b4246;
       font-size: 13px;
+      cursor: pointer;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      display: none;
+    }
+
+    .toggle-row .toggle {
+      width: 42px;
+      height: 24px;
+      border-radius: 12px;
+      background: #cdd2d6;
+      position: relative;
+      transition: background .2s;
+    }
+
+    .toggle-row .toggle::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.15);
+      transition: transform .2s;
+    }
+
+    .toggle-row input[type="checkbox"]:checked + .toggle {
+      background: #232a2e;
+    }
+
+    .toggle-row input[type="checkbox"]:checked + .toggle::after {
+      transform: translateX(18px);
     }
 
     .settings-sheet .field-label {
@@ -745,34 +1006,16 @@
       font-size: 11px;
     }
 
-    .toggle {
-      width: 42px;
-      height: 24px;
-      border-radius: 12px;
-      background: #232a2e;
-      position: relative;
-    }
-
-    .toggle::after {
-      content: "";
-      position: absolute;
-      top: 3px;
-      right: 3px;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: #fff;
-    }
-
     @media (max-width: 900px) {
       .floating-agents {
         right: 10px;
-        width: 132px;
+        width: 148px;
         top: 82px;
+        padding: 10px 8px;
       }
 
       .agent-name {
-        font-size: 14px;
+        font-size: 13px;
       }
 
       .toolbar {

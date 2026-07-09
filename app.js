@@ -1,9 +1,48 @@
-﻿const agents = {
-      assistant: { name: "助理", short: "助", color: "#c26118" },
-      tech: { name: "技术顾问", short: "技", color: "#2c7fb8" },
-      exec: { name: "执行经理", short: "执", color: "#7e3aa8" },
-      knowledge: { name: "知识顾问", short: "知", color: "#1b9b64" },
-      product: { name: "产品经理", short: "产", color: "#cc2d21" }
+﻿const DEFAULT_AGENTS = {
+      assistant: { name: "助理", short: "助", color: "#c26118", roleDesc: "综合助理，擅长拆解复杂问题、梳理逻辑、给出可执行的建议。", skills: ["问题拆解", "逻辑梳理", "结论归类", "行动建议"] },
+      tech: { name: "技术顾问", short: "技", color: "#2c7fb8", roleDesc: "资深技术顾问，擅长架构设计、技术选型和实现路径分析。", skills: ["架构设计", "技术选型", "实现路径", "风险评估"] },
+      exec: { name: "执行经理", short: "执", color: "#7e3aa8", roleDesc: "执行经理，擅长把想法转化为可执行的计划。", skills: ["目标拆解", "里程碑规划", "时间线管理", "风险识别"] },
+      knowledge: { name: "知识顾问", short: "知", color: "#1b9b64", roleDesc: "知识顾问，擅长提炼概念、提供例证和构建知识框架。", skills: ["概念提炼", "例证收集", "知识框架", "事实核验"] },
+      product: { name: "产品经理", short: "产", color: "#cc2d21", roleDesc: "产品经理，擅长从用户价值出发分析需求和设计功能。", skills: ["用户场景", "功能设计", "优先级判断", "成功指标"] }
+    };
+
+    function loadAgents() {
+      try {
+        const saved = localStorage.getItem("inkscope_agents");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          for (const key of Object.keys(DEFAULT_AGENTS)) {
+            if (!parsed[key]) parsed[key] = { ...DEFAULT_AGENTS[key] };
+            else {
+              parsed[key].name = parsed[key].name || DEFAULT_AGENTS[key].name;
+              parsed[key].short = parsed[key].short || DEFAULT_AGENTS[key].short;
+              parsed[key].color = parsed[key].color || DEFAULT_AGENTS[key].color;
+              parsed[key].roleDesc = parsed[key].roleDesc || DEFAULT_AGENTS[key].roleDesc;
+              parsed[key].skills = parsed[key].skills || [...DEFAULT_AGENTS[key].skills];
+            }
+          }
+          return parsed;
+        }
+      } catch { /* ignore */ }
+      return JSON.parse(JSON.stringify(DEFAULT_AGENTS));
+    }
+
+    function saveAgents() {
+      localStorage.setItem("inkscope_agents", JSON.stringify(agents));
+      renderAgentList();
+      updateReadout();
+      renderLinks();
+    }
+
+    let agents = loadAgents();
+
+    // ── 箭头关系类型 ──
+    const LINK_TYPES = {
+      derive: { label: "派生", dash: "none", width: 2.4 },
+      reference: { label: "引用", dash: "8 5", width: 2 },
+      supplement: { label: "补充", dash: "4 4", width: 2 },
+      compare: { label: "对比", dash: "14 4 3 4", width: 2.2 },
+      merge: { label: "合并", dash: "none", width: 3.6 }
     };
 
     const app = document.getElementById("app");
@@ -44,16 +83,86 @@
     let lassoPath = null;
     let lassoPoints = [];
 
+    // ── 画布平移 ──
+    let panX = 0, panY = 0;
+    let isPanning = false;
+    let panStart = null;
+
+    function updateStageTransform() {
+      document.getElementById("stage").style.transform = `translate(${panX}px, ${panY}px)`;
+    }
+
     const toolStyles = {
       pen: { color: "#1f2529", width: 3, opacity: 1 },
-      ball: { color: "#315b88", width: 2.2, opacity: .92 },
-      pencil: { color: "#5b5147", width: 2.8, opacity: .62 },
-      marker: { color: "#e4b72f", width: 12, opacity: .45 },
       select: { color: "#2c7fb8", width: 2, opacity: .85 }
     };
 
     let serverOnline = false;
     let serverProvider = "";
+    let devSettingsEnabled = false;
+
+    // ── 用户设置（仅交互开关，不涉及 API Key）──
+    function loadUserSettings() {
+      try {
+        const saved = JSON.parse(localStorage.getItem("inkscope_user_settings") || "{}");
+        document.getElementById("toggleOcrCorrection").checked = saved.ocrCorrection !== false;
+        document.getElementById("toggleKeepSource").checked = saved.keepSource !== false;
+        document.getElementById("togglePruneMemory").checked = saved.pruneMemory !== false;
+        document.getElementById("togglePressure").checked = saved.pressure !== false;
+      } catch { /* ignore */ }
+    }
+
+    function saveUserSettings() {
+      localStorage.setItem("inkscope_user_settings", JSON.stringify({
+        ocrCorrection: document.getElementById("toggleOcrCorrection").checked,
+        keepSource: document.getElementById("toggleKeepSource").checked,
+        pruneMemory: document.getElementById("togglePruneMemory").checked,
+        pressure: document.getElementById("togglePressure").checked
+      }));
+    }
+
+    ["toggleOcrCorrection", "toggleKeepSource", "togglePruneMemory", "togglePressure"].forEach(id => {
+      document.getElementById(id).addEventListener("change", saveUserSettings);
+    });
+
+    // ── 开发者模式：仅在 ENABLE_DEV_SETTINGS=true 时显示前端 API 配置 ──
+    function setupDevSettingsIfEnabled() {
+      const devSection = document.getElementById("devSettingsSection");
+      if (!devSettingsEnabled) {
+        devSection.style.display = "none";
+        return;
+      }
+      devSection.style.display = "block";
+      const apiKeyInput = document.getElementById("apiKeyInput");
+      const endpointInput = document.getElementById("endpointInput");
+      const settingsSaveBtn = document.getElementById("settingsSaveBtn");
+
+      // 从 localStorage 恢复（仅开发者模式）
+      try {
+        const saved = JSON.parse(localStorage.getItem("inkscope_dev_settings") || "{}");
+        if (saved.apiKey) apiKeyInput.value = saved.apiKey;
+        if (saved.endpoint) endpointInput.value = saved.endpoint;
+      } catch { /* ignore */ }
+
+      settingsSaveBtn.addEventListener("click", async () => {
+        const apiKey = apiKeyInput.value.trim();
+        const endpoint = endpointInput.value.trim();
+        if (!apiKey || !endpoint) { showToast("请输入 API Key 和接入点名称"); return; }
+        localStorage.setItem("inkscope_dev_settings", JSON.stringify({ apiKey, endpoint }));
+        try {
+          await fetch("/api/config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ apiKey, endpoint })
+          });
+        } catch { /* server might not be running */ }
+        await checkHealth();
+        showToast(serverOnline ? "开发者 API 已连接" : "连接失败，请检查配置");
+      });
+    }
+
+    // 清理旧版 API 设置（从生产模式迁移）
+    localStorage.removeItem("inkscope_api_settings");
 
     async function checkHealth() {
       try {
@@ -61,15 +170,17 @@
         const data = await resp.json();
         serverOnline = data.status === "ok";
         serverProvider = data.textProvider || "";
+        devSettingsEnabled = data.devSettingsEnabled === true;
         if (serverOnline) {
           statusIndicator.className = "status-indicator online";
           statusLabel.textContent = `已连接 · ${serverProvider}`;
         } else {
           statusIndicator.className = "status-indicator offline";
           statusLabel.textContent = data.configured?.length
-            ? "服务未连接 · 请检查 Key"
+            ? "服务未连接 · 请检查后端配置"
             : "未配置 Key · 模拟模式";
         }
+        setupDevSettingsIfEnabled();
       } catch {
         serverOnline = false;
         statusIndicator.className = "status-indicator offline";
@@ -85,7 +196,13 @@
 
     function pointFromEvent(event) {
       const rect = app.getBoundingClientRect();
-      return { x: event.clientX - rect.left, y: event.clientY - rect.top, pressure: event.pressure || .5 };
+      return { x: event.clientX - rect.left - panX, y: event.clientY - rect.top - panY, pressure: event.pressure || .5 };
+    }
+
+    // ── 重置画布视图 ──
+    function resetView() {
+      panX = 0; panY = 0;
+      updateStageTransform();
     }
 
     function pointInNode(event, nodeEl) {
@@ -114,15 +231,7 @@
     }
 
     function updateReadout() {
-      const toolName = {
-        move: "移动",
-        pen: "钢笔",
-        ball: "圆珠笔",
-        pencil: "铅笔",
-        marker: "马克笔",
-        eraser: "橡皮",
-        select: "套索"
-      }[activeTool];
+      const toolName = { move: "移动", pen: "钢笔", eraser: "橡皮", select: "套索", connect: "连接" }[activeTool] || activeTool;
       modeReadout.textContent = `${toolName} · ${agents[activeAgent].name}`;
       inkDot.style.background = toolStyles[activeTool]?.color || agents[activeAgent].color;
     }
@@ -134,21 +243,128 @@
       });
       hideScope();
       document.querySelectorAll(".node").forEach(el => el.classList.toggle("move-enabled", tool === "move"));
+      app.style.cursor = tool === "move" ? "grab" : tool === "connect" ? "crosshair" : "";
       updateReadout();
     }
 
-    function setAgent(agent, options = { deriveFromSelection: false }) {
+    function setAgent(agent) {
       activeAgent = agent;
       document.querySelectorAll(".agent-row").forEach(button => {
         button.classList.toggle("active", button.dataset.agent === agent);
       });
       updateReadout();
-      if (options.deriveFromSelection && selectedNodeId && !connectingFrom && lassoPanel.style.display !== "block") {
-        deriveFromNode(selectedNodeId);
-      }
     }
 
+    // ── 动态渲染 Agent 列表 ──
+    function renderAgentList() {
+      const container = document.getElementById("agentList");
+      if (!container) return;
+      container.innerHTML = Object.entries(agents).map(([key, agent]) => `
+        <button class="agent-row${activeAgent === key ? ' active' : ''}" data-agent="${key}" style="--agent-color: ${agent.color}">
+          <span class="agent-face">${agent.short}</span>
+          <span class="agent-name">${agent.name}</span>
+          <span class="agent-badge" style="background:${agent.color}">${agent.skills ? agent.skills.length : 0}</span>
+          <span class="agent-edit-btn" data-edit-agent="${key}" title="编辑 Agent">✎</span>
+        </button>
+      `).join("");
+      bindAgentRowEvents();
+      bindAgentEditEvents();
+    }
+
+    function bindAgentRowEvents() {
+      document.querySelectorAll(".agent-row").forEach(button => {
+        // 移除旧事件（通过克隆节点）
+        const clone = button.cloneNode(true);
+        button.parentNode.replaceChild(clone, button);
+
+        clone.addEventListener("click", event => {
+          // 如果点击的是编辑按钮则不触发选择
+          if (event.target.closest(".agent-edit-btn")) return;
+          if (agentDragStarted) return;
+          const agentKey = clone.dataset.agent;
+          if (selectedNodeId && !connectingFrom && lassoPanel.style.display !== "block") {
+            deriveFromNode(selectedNodeId, agentKey);
+            return;
+          }
+          setAgent(agentKey);
+        });
+        clone.addEventListener("pointerdown", event => {
+          if (event.button && event.button !== 0) return;
+          if (event.target.closest(".agent-edit-btn")) return;
+          agentDragAgent = clone.dataset.agent;
+          const rect = clone.getBoundingClientRect();
+          agentDragStart = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+          agentDragStarted = false;
+        });
+      });
+    }
+
+    // ── Agent 编辑 ──
+    let editingAgentKey = null;
+
+    function bindAgentEditEvents() {
+      document.querySelectorAll(".agent-edit-btn").forEach(btn => {
+        btn.addEventListener("click", event => {
+          event.stopPropagation();
+          event.preventDefault();
+          editingAgentKey = btn.dataset.editAgent;
+          openAgentEditPanel(editingAgentKey);
+        });
+      });
+    }
+
+    function openAgentEditPanel(agentKey) {
+      const agent = agents[agentKey];
+      if (!agent) return;
+      const panel = document.getElementById("agentEditPanel");
+      document.getElementById("editAgentKey").value = agentKey;
+      document.getElementById("editAgentName").value = agent.name;
+      document.getElementById("editAgentShort").value = agent.short;
+      document.getElementById("editAgentColor").value = agent.color;
+      document.getElementById("editAgentRoleDesc").value = agent.roleDesc || "";
+      document.getElementById("editAgentSkills").value = (agent.skills || []).join("、");
+      document.getElementById("editAgentTitle").textContent = `编辑 Agent：${agent.name}`;
+      panel.style.display = "block";
+    }
+
+    function closeAgentEditPanel() {
+      document.getElementById("agentEditPanel").style.display = "none";
+      editingAgentKey = null;
+    }
+
+    function saveAgentEdit() {
+      if (!editingAgentKey) return;
+      const agent = agents[editingAgentKey];
+      if (!agent) return;
+      agent.name = document.getElementById("editAgentName").value.trim() || agent.name;
+      agent.short = document.getElementById("editAgentShort").value.trim() || agent.short;
+      agent.color = document.getElementById("editAgentColor").value || agent.color;
+      agent.roleDesc = document.getElementById("editAgentRoleDesc").value.trim();
+      agent.skills = document.getElementById("editAgentSkills").value
+        .split(/[,，、\s]+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+      saveAgents();
+      closeAgentEditPanel();
+      showToast(`${agent.name} 已保存`);
+    }
+
+    function resetAgentToDefault() {
+      if (!editingAgentKey) return;
+      const def = DEFAULT_AGENTS[editingAgentKey];
+      if (!def) return;
+      agents[editingAgentKey] = JSON.parse(JSON.stringify(def));
+      saveAgents();
+      openAgentEditPanel(editingAgentKey);
+      showToast(`${def.name} 已恢复默认设置`);
+    }
+
+    document.getElementById("saveAgentEdit").addEventListener("click", saveAgentEdit);
+    document.getElementById("closeAgentEditPanel").addEventListener("click", closeAgentEditPanel);
+    document.getElementById("resetAgentDefault").addEventListener("click", resetAgentToDefault);
+
     function beginInk(event) {
+      // ── 套索/选择 ──
       if (activeTool === "select") {
         event.preventDefault();
         if (event.target.closest(".node, .toolbar, .floating-agents, .prompt-dock, .lasso-label, .settings-sheet")) return;
@@ -162,7 +378,20 @@
         inkLayer.appendChild(lassoPath);
         return;
       }
-      if (!["pen", "ball", "pencil", "marker", "eraser"].includes(activeTool)) return;
+      // ── 移动画布 ──
+      if (activeTool === "move") {
+        if (event.target.closest(".node, .toolbar, .floating-agents, .prompt-dock, .lasso-label, .settings-sheet")) return;
+        event.preventDefault();
+        isPanning = true;
+        panStart = { x: event.clientX, y: event.clientY, panX, panY };
+        inkLayer.setPointerCapture?.(event.pointerId);
+        app.style.cursor = "grabbing";
+        return;
+      }
+      // ── 连接工具 ──
+      if (activeTool === "connect") return;
+      // ── 钢笔 / 橡皮 ──
+      if (!["pen", "eraser"].includes(activeTool)) return;
       if (event.target.closest(".node, .toolbar, .floating-agents, .prompt-dock, .lasso-label, .settings-sheet")) return;
 
       event.preventDefault();
@@ -187,6 +416,15 @@
     }
 
     function moveInk(event) {
+      // ── 画布平移中 ──
+      if (isPanning) {
+        event.preventDefault();
+        panX = panStart.panX + (event.clientX - panStart.x);
+        panY = panStart.panY + (event.clientY - panStart.y);
+        updateStageTransform();
+        return;
+      }
+      // ── 套索绘制中 ──
       if (lassoDrawing) {
         event.preventDefault();
         const point = pointFromEvent(event);
@@ -194,6 +432,7 @@
         lassoPath.setAttribute("d", pathFromPoints(lassoPoints));
         return;
       }
+      // ── 钢笔/橡皮绘制中 ──
       if (!drawing) return;
       event.preventDefault();
       const point = pointFromEvent(event);
@@ -212,6 +451,14 @@
     }
 
     function endInk(event) {
+      // ── 结束画布平移 ──
+      if (isPanning) {
+        isPanning = false;
+        inkLayer.releasePointerCapture?.(event.pointerId);
+        app.style.cursor = "grab";
+        return;
+      }
+      // ── 结束套索绘制 ──
       if (lassoDrawing) {
         lassoDrawing = false;
         inkLayer.releasePointerCapture?.(event.pointerId);
@@ -248,7 +495,6 @@
 
       const stroke = { id: Date.now(), path: currentPath, points: [...points], tool: activeTool };
       strokes.push(stroke);
-      if (activeTool === "marker") openMarkerPanel(stroke);
 
       currentPath = null;
       points = [];
@@ -487,20 +733,45 @@
       const agent = agents[agentKey];
       const clean = source.replace(/\s+/g, " ").trim() || "未命名问题";
       const templates = {
-        assistant: ["先拆成可回答的问题，再补齐缺口。", "把结论标注为「事实」「推断」「待验证」。", "建议下一步由技术或产品 Agent 继续派生。"],
-        tech: ["识别实现路径、依赖与接口边界。", "先做本地 OCR + 节点图谱，再接入远端模型。", "高风险点是手写识别准确率与上下文裁剪。"],
-        exec: ["压缩为可执行计划：目标、负责人、时间盒。", "把偏差节点剪枝，避免错误进入后续记忆。", "下一轮只保留已验证上下文。"],
-        knowledge: ["提取概念、定义、例证和反例。", "把来源节点作为知识链路，不直接覆盖原文。", "建议追加一个事实核验节点。"],
-        product: ["把用户动作映射为可控的上下文管理。", "核心价值是可见、可删、可嫁接、可追踪。", "MVP 先验证框选生成和上下文嗅探。"]
+        assistant: [
+          "拆解核心问题为 2-3 个可独立回答的子问题，逐个分析",
+          "将结论标注为「事实」「推断」「待验证」三类，避免混淆",
+          "给出明确的下一步建议：优先做什么、谁来做、预期结果",
+          "识别当前分析中可能遗漏的盲区或假设"
+        ],
+        tech: [
+          "梳理实现路径：列出关键技术栈、依赖项和接口边界",
+          "对比至少 2 种可行方案，给出各自的优劣和适用场景",
+          "评估技术风险：性能瓶颈、安全边界、扩展性限制",
+          "建议分阶段实施：MVP 范围 → 迭代计划 → 长期架构"
+        ],
+        exec: [
+          "将目标拆解为可执行的任务清单，每项含负责人和时间盒",
+          "识别关键路径和里程碑，标注依赖关系",
+          "列出 3 个最大的风险点和对应的缓解措施",
+          "定义完成标准：如何判断每个任务已经「做完」"
+        ],
+        knowledge: [
+          "提炼 3-5 个核心概念并给出简洁定义",
+          "为每个概念提供至少一个具体例证和反例",
+          "标注概念之间的关联关系（因果、层级、对比）",
+          "列出值得进一步验证的事实假设和信息缺口"
+        ],
+        product: [
+          "从用户场景出发：谁在什么情况下需要这个功能",
+          "描述核心功能的价值主张和差异化亮点",
+          "划分优先级：P0 必须有 / P1 应该有 / P2 可以有",
+          "给出可验证的成功指标：用户行为变化或数据指标"
+        ]
       };
       const intro = mode === "graft"
         ? `基于 ${parents.length} 个节点汇聚：${clean}`
         : mode === "derive"
-          ? `从选中内容派生：${clean}`
+          ? `从选中内容继续生成：${clean}`
           : `识别手写：${clean}`;
 
       return `
-        <p><span class="source-line">${intro}</span></p>
+        <p><span class="source-line">${escapeHtml(intro)}</span></p>
         <ul>
           ${templates[agentKey].map(item => `<li>${item}</li>`).join("")}
         </ul>
@@ -532,12 +803,17 @@
         const node = findNode(id);
         return node ? `${agents[node.agentKey].name}: ${node.source}` : "";
       }).filter(Boolean).join("\n");
+      const agent = agents[agentKey];
+      const roleDesc = agent.roleDesc || `${agent.name}，为用户提供专业分析和建议。`;
+      const skillsText = (agent.skills && agent.skills.length > 0)
+        ? `核心能力：${agent.skills.join("、")}。`
+        : "";
+      const modeDesc = mode === "derive" ? "基于已有节点继续深入分析" : mode === "graft" ? "综合多个节点的内容生成新结论" : "根据用户输入生成初始分析";
       const prompt = [
-        `你是${agents[agentKey].name}，请输出适合白板节点的中文内容。`,
-        "要求：短、可操作、分点，不要写长文。",
-        `当前操作：${mode}`,
+        `任务：${modeDesc}。`,
+        `用户内容：${source}`,
         context ? `上游上下文：\n${context}` : "",
-        `用户内容：${source}`
+        "请输出结构化的节点内容：用1-2句话概括结论，再用3-5个要点展开分析或行动建议。使用中文输出。"
       ].filter(Boolean).join("\n\n");
 
       const response = await fetch("/api/chat", {
@@ -545,7 +821,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: [
-            { role: "system", content: "你是一个可视化白板中的 AI Agent，只输出节点内容。" },
+            { role: "system", content: `你是${agent.name}。${roleDesc} ${skillsText}你工作在可视化白板中，输出会被放在一个节点卡片里。请确保内容结构清晰、可直接使用，不要输出问候语。` },
             { role: "user", content: prompt }
           ]
         })
@@ -646,7 +922,7 @@
       }, true);
 
       el.addEventListener("pointerdown", event => {
-        if (!["pen", "ball", "pencil", "marker"].includes(activeTool)) return;
+        if (activeTool !== "pen") return;
         if (event.target.closest(".connector")) return;
         event.preventDefault();
         event.stopPropagation();
@@ -690,7 +966,6 @@
         const stroke = { id: Date.now(), path: nodeInkPath, points: [...nodeInkGlobalPoints], tool: activeTool, nodeId: el.dataset.id };
         node.nodeStrokes = node.nodeStrokes || [];
         node.nodeStrokes.push(stroke);
-        if (activeTool === "marker") openMarkerPanel(stroke, el.dataset.id);
         nodeInkPath = null;
         nodeInkPoints = [];
         nodeInkGlobalPoints = [];
@@ -727,9 +1002,74 @@
         el.releasePointerCapture?.(event.pointerId);
       });
 
+      // ── 连接器拖拽（自由连接）──
+      const connector = el.querySelector(".connector");
+      let connDragging = false;
+
+      connector.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        connDragging = true;
+        const fromId = el.dataset.id;
+        const fromNode = findNode(fromId);
+        const startPos = { x: fromNode.x + fromNode.width, y: fromNode.y + 94 };
+        showDragLine(startPos, { x: event.clientX, y: event.clientY });
+        showToast("拖拽到另一个节点建立连接，或松手在空白处取消");
+
+        function onMove(e) {
+          if (!connDragging) return;
+          updateDragLine({ x: e.clientX, y: e.clientY });
+        }
+        function onUp(e) {
+          if (!connDragging) return;
+          connDragging = false;
+          hideDragLine();
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+          // 检测释放位置是否在另一个节点上
+          const targetNode = document.elementFromPoint(e.clientX, e.clientY)?.closest(".node");
+          if (targetNode && targetNode.dataset.id !== fromId) {
+            const toId = targetNode.dataset.id;
+            if (!links.some(l => l.from === fromId && l.to === toId)) {
+              addLink(fromId, toId);
+              saveLinks();
+              renderLinks();
+              showToast("已建立连接箭头，点击箭头可编辑关系类型");
+            } else {
+              showToast("这两个节点之间已有连接");
+            }
+          } else if (targetNode && targetNode.dataset.id === fromId) {
+            showToast("不能连接到自身");
+          }
+        }
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+      });
+
       el.addEventListener("click", event => {
         const action = event.target.dataset.action;
         const id = el.dataset.id;
+
+        // ── 连接工具模式：点第一个节点 → 点第二个节点 → 创建箭头 ──
+        if (activeTool === "connect") {
+          if (connectingFrom && connectingFrom !== id) {
+            if (!links.some(l => l.from === connectingFrom && l.to === id)) {
+              addLink(connectingFrom, id);
+              renderLinks();
+              showToast("已建立连接箭头，点击箭头可编辑关系类型");
+            } else {
+              showToast("这两个节点之间已有连接");
+            }
+            selectNode(id);
+            connectingFrom = null;
+            return;
+          }
+          selectNode(id);
+          connectingFrom = id;
+          showToast("已选择起点节点，点击另一个节点完成连接");
+          return;
+        }
+
         selectNode(id);
 
         if (connectingFrom && connectingFrom !== id && action !== "connect") {
@@ -738,8 +1078,12 @@
           return;
         }
 
-        if (action === "connect") startConnect(id);
-        else sniffNode(id, event.clientX, event.clientY);
+        if (action === "connect") {
+          // 点击连接器也触发拖拽提示
+          startConnect(id);
+        } else {
+          sniffNode(id, event.clientX, event.clientY);
+        }
       });
 
       el.addEventListener("pointerenter", event => {
@@ -757,14 +1101,18 @@
       document.querySelectorAll(".node").forEach(el => el.classList.toggle("selected", el.dataset.id === id));
     }
 
-    function deriveFromNode(id) {
+    function deriveFromNode(id, agentKeyOverride) {
       const parent = findNode(id);
+      const agentKey = agentKeyOverride || activeAgent;
       const childX = parent.x + 360;
       const childY = parent.y + 46;
+      // 派生前清除旧选中，createNode 内部会自动选中新节点
+      selectedNodeId = null;
+      document.querySelectorAll(".node").forEach(el => el.classList.remove("selected"));
       createNode({
         x: childX,
         y: childY,
-        agentKey: activeAgent,
+        agentKey,
         source: parent.source,
         mode: "derive",
         parents: [id]
@@ -793,6 +1141,7 @@
     function deleteNode(id) {
       nodes = nodes.filter(node => node.id !== id);
       links = links.filter(link => link.from !== id && link.to !== id);
+      saveLinks();
       document.querySelector(`.node[data-id="${id}"]`)?.remove();
       if (selectedNodeId === id) selectedNodeId = null;
       if (connectingFrom === id) connectingFrom = null;
@@ -801,9 +1150,35 @@
       showToast("已剪枝：节点和相关上下文连接已移除");
     }
 
-    function addLink(from, to) {
+    function addLink(from, to, type = "derive") {
       if (!from || !to || links.some(link => link.from === from && link.to === to)) return;
-      links.push({ id: `l${linkId++}`, from, to });
+      links.push({ id: `l${linkId++}`, from, to, type });
+      saveLinks();
+    }
+
+    // ── 连接关系 localStorage 持久化 ──
+    function saveLinks() {
+      try {
+        localStorage.setItem("inkscope_links", JSON.stringify(links));
+      } catch { /* ignore */ }
+    }
+
+    function loadLinks() {
+      try {
+        const saved = localStorage.getItem("inkscope_links");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // 只恢复两端节点都存在的连接
+          const restored = parsed.filter(l => findNode(l.from) && findNode(l.to));
+          for (const l of restored) {
+            if (!links.some(existing => existing.from === l.from && existing.to === l.to)) {
+              links.push(l);
+              if (parseInt(l.id.slice(1)) >= linkId) linkId = parseInt(l.id.slice(1)) + 1;
+            }
+          }
+          if (restored.length > 0) renderLinks();
+        }
+      } catch { /* ignore */ }
     }
 
     function renderLinks() {
@@ -819,11 +1194,16 @@
         const from = findNode(link.from);
         const to = findNode(link.to);
         if (!from || !to) continue;
+        const typeDef = LINK_TYPES[link.type] || LINK_TYPES.derive;
         const color = agents[from.agentKey].color;
         const start = { x: from.x + from.width, y: from.y + 94 };
         const end = { x: to.x, y: to.y + 72 };
         const dx = Math.max(80, Math.abs(end.x - start.x) * .42);
         const d = `M ${start.x} ${start.y} C ${start.x + dx} ${start.y}, ${end.x - dx} ${end.y}, ${end.x} ${end.y}`;
+
+        // 计算箭头中点用于标签定位
+        const midX = (start.x + end.x) / 2 + dx * 0.15;
+        const midY = (start.y + end.y) / 2;
 
         const hit = svgEl("path", { d, class: "arrow-hit", "data-link": link.id });
         const line = svgEl("path", {
@@ -831,15 +1211,32 @@
           class: "arrow-path",
           "data-link": link.id,
           "marker-end": "url(#arrowHead)",
+          "stroke-dasharray": typeDef.dash === "none" ? "0" : typeDef.dash,
+          "stroke-width": typeDef.width,
           style: `--agent-color:${color}`
         });
-        hit.addEventListener("click", () => sniffLink(link.id));
+        // 关系类型标签
+        const label = svgEl("text", {
+          x: midX, y: midY - 6,
+          class: "arrow-label",
+          "data-link": link.id,
+          fill: "#6b757d",
+          "font-size": "11",
+          "text-anchor": "middle"
+        });
+        label.textContent = typeDef.label;
+
+        hit.addEventListener("click", event => {
+          event.stopPropagation();
+          openArrowPanel(link, { x: event.clientX, y: event.clientY });
+        });
         hit.addEventListener("pointerenter", event => {
           sniffLink(link.id, event.clientX, event.clientY);
         });
         hit.addEventListener("pointerleave", hideScope);
         arrowLayer.appendChild(hit);
         arrowLayer.appendChild(line);
+        arrowLayer.appendChild(label);
       }
     }
 
@@ -847,9 +1244,59 @@
       const line = arrowLayer.querySelector(`.arrow-path[data-link="${id}"]`);
       line?.classList.add("arrow-cut");
       links = links.filter(link => link.id !== id);
+      saveLinks();
       setTimeout(renderLinks, 180);
-      showToast("已划断上下文连接：两个节点不再互相污染记忆");
+      closeArrowPanel();
+      showToast("已删除连接箭头");
     }
+
+    // ── 箭头编辑面板 ──
+    let editingLinkId = null;
+
+    function openArrowPanel(link, pos) {
+      editingLinkId = link.id;
+      const panel = document.getElementById("arrowEditPanel");
+      const typeSelect = document.getElementById("arrowTypeSelect");
+      typeSelect.value = link.type || "derive";
+      panel.style.display = "block";
+      panel.style.left = `${Math.min(pos.x, window.innerWidth - 220)}px`;
+      panel.style.top = `${Math.max(80, pos.y - 20)}px`;
+    }
+
+    function closeArrowPanel() {
+      editingLinkId = null;
+      document.getElementById("arrowEditPanel").style.display = "none";
+    }
+
+    function updateLinkType() {
+      if (!editingLinkId) return;
+      const newType = document.getElementById("arrowTypeSelect").value;
+      const link = links.find(l => l.id === editingLinkId);
+      if (link) {
+        link.type = newType;
+        saveLinks();
+        renderLinks();
+        showToast(`箭头关系已更新为：${LINK_TYPES[newType].label}`);
+      }
+    }
+
+    function reverseLinkDirection() {
+      if (!editingLinkId) return;
+      const link = links.find(l => l.id === editingLinkId);
+      if (link) {
+        [link.from, link.to] = [link.to, link.from];
+        saveLinks();
+        renderLinks();
+        showToast("箭头方向已反转");
+      }
+    }
+
+    document.getElementById("arrowTypeSelect").addEventListener("change", updateLinkType);
+    document.getElementById("reverseArrowBtn").addEventListener("click", reverseLinkDirection);
+    document.getElementById("deleteArrowBtn").addEventListener("click", () => {
+      if (editingLinkId) cutLink(editingLinkId);
+    });
+    document.getElementById("closeArrowPanel").addEventListener("click", closeArrowPanel);
 
     function sniffNode(id, x = 0, y = 0) {
       const context = collectContext(id);
@@ -946,20 +1393,6 @@
       button.addEventListener("click", () => setTool(button.dataset.tool));
     });
 
-    document.querySelectorAll(".agent-row").forEach(button => {
-      button.addEventListener("click", () => {
-        if (agentDragStarted) return;
-        setAgent(button.dataset.agent);
-      });
-      button.addEventListener("pointerdown", event => {
-        if (event.button && event.button !== 0) return;
-        agentDragAgent = button.dataset.agent;
-        const rect = button.getBoundingClientRect();
-        agentDragStart = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-        agentDragStarted = false;
-      });
-    });
-
     window.addEventListener("pointermove", event => {
       if (!agentDragAgent) return;
       if (!agentDragStarted) {
@@ -1022,6 +1455,11 @@
       if (!lastLassoBox) return;
       const parentNodeId = lassoPanel.dataset.nodeId || "";
       const parent = parentNodeId ? findNode(parentNodeId) : null;
+      // 清除来源节点上的手写笔迹（如果是从节点上识别的手写内容）
+      if (parent && parent.nodeStrokes && parent.nodeStrokes.length > 0) {
+        parent.nodeStrokes.forEach(s => s.path?.remove());
+        parent.nodeStrokes = [];
+      }
       createNode({
         x: parent ? parent.x + 340 : lastLassoBox.x + lastLassoBox.width + 24,
         y: parent ? parent.y + 36 : lastLassoBox.y,
@@ -1111,7 +1549,10 @@
       document.querySelectorAll(".node").forEach(el => el.classList.remove("selected"));
     }
 
+    renderAgentList();
+    loadUserSettings();
     checkHealth();
     updateReadout();
     seedDemo();
-    showToast("先用钢笔写字，再切到套索框选，调用右侧 Agent 生成节点");
+    loadLinks(); // 恢复之前保存的连接关系
+    showToast("用钢笔写字 → 套索框选 → 点击 Agent。拖拽节点右侧连接点可自由连线。");

@@ -31,21 +31,7 @@
     </header>
 
     <aside class="floating-agents" aria-label="Agent 角色栏">
-      <button class="agent-row active" data-agent="assistant" style="--agent-color: var(--orange)">
-        <span class="agent-face">助</span><span class="agent-name">助理</span><span class="agent-badge">4</span>
-      </button>
-      <button class="agent-row" data-agent="tech" style="--agent-color: var(--blue)">
-        <span class="agent-face">技</span><span class="agent-name">技术</span><span class="agent-badge">2</span>
-      </button>
-      <button class="agent-row" data-agent="exec" style="--agent-color: var(--violet)">
-        <span class="agent-face">执</span><span class="agent-name">执行</span><span class="agent-badge">1</span>
-      </button>
-      <button class="agent-row" data-agent="knowledge" style="--agent-color: var(--green)">
-        <span class="agent-face">知</span><span class="agent-name">知识</span><span class="agent-badge">0</span>
-      </button>
-      <button class="agent-row" data-agent="product" style="--agent-color: var(--red)">
-        <span class="agent-face">产</span><span class="agent-name">产品</span><span class="agent-badge">0</span>
-      </button>
+      <div id="agentList"><!-- JS 动态渲染 --></div>
       <button class="settings-btn" id="settingsBtn">设置</button>
     </aside>
 
@@ -59,40 +45,28 @@
 
     <nav class="toolbar" aria-label="画布工具栏">
       <button class="tool" data-tool="move" aria-label="移动">
-        <svg viewBox="0 0 32 32"><path d="M16 4v24"/><path d="M10 10l6-6 6 6"/><path d="M10 22l6 6 6-6"/><path d="M4 16h24"/><path d="M10 10L4 16l6 6"/><path d="M22 10l6 6-6 6"/></svg>
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="1.5"/><path d="M12 2v7M12 15v7M2 12h7M15 12h7M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3"/></svg>
         <span class="tip">移动</span>
       </button>
       <button class="tool active" data-tool="pen" aria-label="钢笔">
-        <svg viewBox="0 0 32 32"><path d="M18 4l7 7-12 17-6 1 1-6z"/><path d="M15 7l10 10"/></svg>
+        <svg viewBox="0 0 24 24" fill="none"><path d="M16.5 3.5l4 4L9 19l-4.5.5L5 15z"/><path d="M13 7l4 4"/></svg>
         <span class="tip">钢笔</span>
       </button>
-      <button class="tool" data-tool="ball" aria-label="圆珠笔">
-        <svg viewBox="0 0 32 32"><path d="M17 4l7 7-11 15-5 2 2-5z"/><path d="M21 8l3 3"/><path d="M8 28l4-4"/></svg>
-        <span class="tip">圆珠笔</span>
-      </button>
-      <button class="tool" data-tool="pencil" aria-label="铅笔">
-        <svg viewBox="0 0 32 32"><path d="M6 24l2 2 4-1L26 11l-5-5L7 20z"/><path d="M18 8l5 5"/></svg>
-        <span class="tip">铅笔</span>
-      </button>
-      <button class="tool" data-tool="marker" aria-label="马克笔">
-        <svg viewBox="0 0 32 32"><path d="M9 23l10-16 5 3-10 16z"/><path d="M7 27h12"/><path d="M8 22l6 4"/></svg>
-        <span class="tip">马克笔</span>
-      </button>
       <button class="tool" data-tool="select" aria-label="套索">
-        <svg viewBox="0 0 32 32"><path d="M12 4c-4 0-8 2-8 6s4 6 9 8c-5 2-9 5-9 9 0 4 3 5 8 5h14V4H12z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.2"/></svg>
         <span class="tip">套索</span>
       </button>
       <button class="tool" data-tool="eraser" aria-label="橡皮">
-        <svg viewBox="0 0 32 32"><path d="M7 20l9-11 9 7-8 10H9z"/><path d="M13 13l9 7"/><path d="M5 27h20"/></svg>
+        <svg viewBox="0 0 24 24" fill="none"><path d="M20 20H6.5L3 16.5l8.5-8.5 5.5 5.5z"/><path d="M9 10l5 5"/></svg>
         <span class="tip">橡皮</span>
       </button>
       <span class="separator"></span>
       <button class="tool" id="undoBtn" aria-label="撤销">
-        <svg viewBox="0 0 32 32"><path d="M12 10H6v6"/><path d="M7 10c4-5 15-5 18 3 2 6-3 12-10 12"/></svg>
+        <svg viewBox="0 0 24 24" fill="none"><path d="M8 14L3 8l5-6"/><path d="M3 8h10a6 6 0 010 12h-3"/></svg>
         <span class="tip">撤销</span>
       </button>
       <button class="tool" id="clearBtn" aria-label="清空手写">
-        <svg viewBox="0 0 32 32"><path d="M8 10h16"/><path d="M12 10V7h8v3"/><path d="M11 14l1 11h8l1-11"/></svg>
+        <svg viewBox="0 0 24 24" fill="none"><path d="M3 6h18M8 6V4h8v2M5 6l1 14h12l1-14"/></svg>
         <span class="tip">清空手写</span>
       </button>
       <span class="color-dot" id="inkDot" style="background:#1f2529"></span>
@@ -111,16 +85,102 @@
       <p id="scopeText">悬浮节点或箭头时显示模型会携带的上下文。</p>
     </div>
 
+    <!-- 箭头编辑面板 -->
+    <div class="arrow-edit-panel" id="arrowEditPanel">
+      <div class="arrow-edit-header">
+        <span>箭头关系</span>
+        <button id="closeArrowPanel" class="close-btn">✕</button>
+      </div>
+      <select id="arrowTypeSelect" class="arrow-type-select">
+        <option value="derive">派生</option>
+        <option value="reference">引用</option>
+        <option value="supplement">补充</option>
+        <option value="compare">对比</option>
+        <option value="merge">合并</option>
+      </select>
+      <div class="arrow-edit-actions">
+        <button class="mini-btn" id="reverseArrowBtn">反转方向</button>
+        <button class="mini-btn danger" id="deleteArrowBtn">删除连接</button>
+      </div>
+    </div>
+
+    <!-- Agent 编辑面板 -->
+    <div class="agent-edit-panel" id="agentEditPanel">
+      <div class="agent-edit-header">
+        <h3 id="editAgentTitle">编辑 Agent</h3>
+        <button id="closeAgentEditPanel" class="close-btn">✕</button>
+      </div>
+      <input type="hidden" id="editAgentKey" />
+      <div class="agent-edit-field">
+        <label>名称</label>
+        <input id="editAgentName" type="text" placeholder="Agent 名称" />
+      </div>
+      <div class="agent-edit-field">
+        <label>简称（1-2字）</label>
+        <input id="editAgentShort" type="text" maxlength="2" placeholder="简称" />
+      </div>
+      <div class="agent-edit-field">
+        <label>颜色</label>
+        <input id="editAgentColor" type="color" />
+      </div>
+      <div class="agent-edit-field">
+        <label>角色说明</label>
+        <textarea id="editAgentRoleDesc" rows="2" placeholder="描述 Agent 的角色和能力"></textarea>
+      </div>
+      <div class="agent-edit-field">
+        <label>Skills（用逗号或顿号分隔）</label>
+        <textarea id="editAgentSkills" rows="2" placeholder="例如：问题拆解、逻辑梳理、行动建议"></textarea>
+      </div>
+      <div class="agent-edit-actions">
+        <button class="mini-btn primary" id="saveAgentEdit">保存</button>
+        <button class="mini-btn" id="resetAgentDefault">恢复默认</button>
+      </div>
+    </div>
+
     <section class="settings-sheet" id="settingsSheet">
       <h2>设置</h2>
       <div class="settings-status" id="settingsStatus">
         <span class="status-indicator" id="statusIndicator"></span>
         <span id="statusLabel">正在检测服务...</span>
       </div>
-      <label>自动 OCR 修正 <span class="toggle"></span></label>
-      <label>生成时保留手写来源 <span class="toggle"></span></label>
-      <label>剪枝后从记忆中移除 <span class="toggle"></span></label>
-      <label>Apple Pencil 压感笔迹 <span class="toggle"></span></label>
+
+      <div class="settings-section-title">交互设置</div>
+
+      <label class="toggle-row">
+        <span>自动 OCR 修正</span>
+        <input type="checkbox" id="toggleOcrCorrection" checked />
+        <span class="toggle"></span>
+      </label>
+      <label class="toggle-row">
+        <span>生成时保留手写来源</span>
+        <input type="checkbox" id="toggleKeepSource" checked />
+        <span class="toggle"></span>
+      </label>
+      <label class="toggle-row">
+        <span>剪枝后从记忆中移除</span>
+        <input type="checkbox" id="togglePruneMemory" checked />
+        <span class="toggle"></span>
+      </label>
+      <label class="toggle-row">
+        <span>Apple Pencil 压感笔迹</span>
+        <input type="checkbox" id="togglePressure" checked />
+        <span class="toggle"></span>
+      </label>
+
+      <!-- 开发者模式：由后端 ENABLE_DEV_SETTINGS 控制，默认隐藏 -->
+      <div id="devSettingsSection" style="display:none">
+        <div class="settings-section-title" style="margin-top:12px">开发者 API 配置</div>
+        <div class="settings-group">
+          <label class="field-label" for="apiKeyInput">API Key</label>
+          <input class="settings-input" id="apiKeyInput" type="password" placeholder="输入豆包 API Key" autocomplete="off" />
+        </div>
+        <div class="settings-group">
+          <label class="field-label" for="endpointInput">接入点名称</label>
+          <input class="settings-input" id="endpointInput" type="text" placeholder="例如：ep-20250101123456-xxxxx" autocomplete="off" />
+        </div>
+        <button class="settings-save" id="settingsSaveBtn">保存到服务端</button>
+        <p class="settings-hint">仅当 ENABLE_DEV_SETTINGS=true 时显示。生产环境请在 .env 中配置。</p>
+      </div>
     </section>
 
     <svg id="dragLayer" aria-hidden="true"></svg>
