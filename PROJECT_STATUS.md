@@ -1,63 +1,149 @@
 # PROJECT_STATUS.md
 
-## 当前项目状态
+## 当前版本：v0.1-online-demo（已部署 Render）
 
-这是 Codex 生成 + Claude Code 持续开发的手写交互式 AI Canvas 网页项目。
+Codex 生成 + Claude Code 持续开发的手写交互式 AI Canvas 网页项目。
 
-## 当前启动方式
+## 已完成功能
 
-```bash
-# 1. 配置环境变量
-cp .env.example .env
-# 编辑 .env，至少填入一个服务商的 API Key
+### 手写 & 识别
+- ✅ 钢笔手写绘制（支持压感）
+- ✅ 套索框选手写区域
+- ✅ OCR 视觉模型识别手写中文/英文
+- ✅ 识别结果可修正后调用 Agent
 
-# 2. 启动
-node server.js
-```
+### Agent 系统
+- ✅ 5 个默认 Agent：助理、技术顾问、执行经理、知识顾问、产品经理
+- ✅ Agent 自定义：名称、简称、颜色、角色说明、skills
+- ✅ Agent 配置 localStorage 持久化
+- ✅ Agent 拖拽到手写区域触发识别+生成
+- ✅ 选中节点 + 点击 Agent → 二次派生（跨 Agent）
+- ✅ Skills 纳入 AI prompt
 
-访问：http://localhost:8078
+### 节点 & 连接
+- ✅ Agent 生成内容以卡片节点展示
+- ✅ 节点正文内部滚动（max-height 420px）
+- ✅ 节点文字选中 → 弹出 Agent 浮窗 → 二次生成
+- ✅ 节点拖拽移动 + 删除按钮
+- ✅ 5 种箭头关系类型：派生/引用/补充/对比/合并
+- ✅ 从连接器拖拽自由连线
+- ✅ 连接关系 localStorage 持久化
+- ✅ 箭头编辑面板（改类型/反转/删除）
+- ✅ 剪刀工具裁剪箭头、垃圾桶工具删除节点
 
-## 已有文件
+### 画布 & 工具栏
+- ✅ 网格背景（24px）
+- ✅ 画布平移（手形工具拖拽）
+- ✅ 坐标系统（world coords + pan transform）
+- ✅ iPad 风格底部工具托盘（大圆角、6 个 SVG 工具图标）
+- ✅ 左侧 Agent 浮动面板
+- ✅ 橡皮擦仅擦除 strokes，不删节点
 
-- index.html — 页面结构
-- styles.css — 页面样式
-- app.js — 交互逻辑
-- server.js — 本地服务 + AI 代理
-- .env.example — 环境变量模板
-- .gitignore — Git 忽略规则
+### 后端 & 安全
+- ✅ `/api/chat` — AI 文本生成（豆包）
+- ✅ `/api/ocr` — 手写图片识别（豆包 Vision）
+- ✅ `/api/health` — 服务健康检查
+- ✅ API Key 仅在后端 .env 管理
+- ✅ 前端无 API Key 暴露
+- ✅ 开发者模式默认关闭（`ENABLE_DEV_SETTINGS`）
 
-## API 架构（生产部署模式）
+## 已知问题
 
-```
-前端 (app.js)          后端 (server.js)         AI 服务商
-───────────           ─────────────────       ──────────
-callModel()     →     POST /api/chat     →   OpenAI / DeepSeek / 豆包
-ocrFromImage()  →     POST /api/ocr      →   Vision 模型
-checkHealth()   →     GET  /api/health   →   返回服务状态
-```
+1. 画布平移后，节点位置在浏览器缩放/窗口调整后可能偏移
+2. 大量节点时性能未优化
+3. iPad 端 Apple Pencil 体验待优化（压感、防误触）
+4. 套索选择不支持不完全闭合的手势
+5. 无缩放（zoom）功能
 
-所有 API Key 在后端 .env 中管理，前端不暴露任何 Key。
+## 下一阶段开发计划
+
+1. Canvas 缩放（pinch-to-zoom / 滚轮缩放）
+2. iPad 端触摸和 Apple Pencil 深度优化
+3. Agent 角色新增/删除（当前只能编辑默认 5 个）
+4. 节点内容富文本编辑
+5. 多页/多画布支持
+6. 导出为图片/PDF
+
+## 技术栈
+
+- 前端：原生 HTML + CSS + JS（无框架）
+- 后端：Node.js http 模块（无 Express）
+- AI：豆包 (Doubao) API（Ark）
+- 部署：Render
 
 ## 环境变量
 
 | 变量 | 说明 | 必填 |
-|---|---|---|
-| `DOUBAO_API_KEY` | 豆包 API Key | 至少一个 |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key | 至少一个 |
-| `OPENAI_API_KEY` | OpenAI API Key | 至少一个 |
-| `DEFAULT_TEXT_PROVIDER` | 文本生成服务商 (doubao/deepseek/openai) | 可选 |
-| `DEFAULT_OCR_PROVIDER` | OCR 服务商 | 可选 |
-| `PORT` | 服务端口 (默认 8078) | 可选 |
-
-## 下一步任务
-
-1. 临时套索选区识别（套索选择 → 自动 OCR → 调用 Agent）
-2. Agent 角色自定义（用户可添加/编辑/删除 Agent）
-3. Content 内容管理栏（左侧内容列表）
-4. iPad 端触摸和 Apple Pencil 体验优化
-5. 节点上下文管理可视化增强
+|------|------|------|
+| `DOUBAO_API_KEY` | 豆包 API Key | ✅ |
+| `DOUBAO_CHAT_MODEL` | 推理接入点 ID | ✅ |
+| `DOUBAO_OCR_MODEL` | OCR 模型接入点 | 可选 |
+| `DOUBAO_BASE_URL` | API 地址 | 可选 |
+| `PORT` | 服务端口（默认 8078） | 可选 |
+| `ENABLE_DEV_SETTINGS` | 开发者模式 | 可选 |
 
 ## 最近一次修改记录
+
+---
+
+### 工具：
+Claude Code
+
+### 完成内容：
+
+**上线后稳定性优化（第 17 轮）：**
+
+1. **新手使用引导**：
+   - 首次访问弹出半透明遮罩引导卡片，6 步操作说明
+   - localStorage 记录 `inkscope_onboarding_seen`，已看过不再弹出
+   - 关闭后显示 toast 提示开始使用
+
+2. **Agent 调用 loading 状态**：
+   - `loadingContent()` 改为旋转 spinner + "正在思考中…" 文字
+   - 新节点自动添加 `.node-loading` class，显示脉冲动画 + 底部渐变 loading bar
+   - 内容生成完成后移除 loading class，失败时添加 `.node-error`
+
+3. **API 调用友好错误提示**：
+   - `resolveGeneratedContent()` 区分错误类型：网络失败 / 503 服务不可用 / 其他错误
+   - 自动回退 `generateFallbackContent()` 本地模拟内容
+   - 空响应也触发回退
+
+4. **一键重置示例画布**：
+   - 设置面板新增「重置为示例画布」按钮
+   - `resetToDemo()` 清除所有节点、连接、笔迹、平移状态
+   - 重新调用 `seedDemo()` 生成 4 个示例节点
+
+**文件改动：**
+- `index.html`：新手引导浮层 `.onboarding-overlay` + 重置按钮 `#resetDemoBtn`
+- `styles.css`：引导卡片、spinner、loading bar、node-error 样式（~100 行）
+- `app.js`：`showOnboarding()`、`resetToDemo()`、增强 `loadingContent()`/`resolveGeneratedContent()`/`createNode()`
+- `README.md`：新增新手引导、loading、一键重置、友好错误提示条目
+
+
+
+---
+
+- 新建 `README.md`（项目简介、核心功能、本地启动、Render 部署、环境变量、安全说明）
+- `PROJECT_STATUS.md` 顶部重写为当前状态总览（已完成功能清单、已知问题、下阶段计划）
+- 版本号：**v0.1-online-demo**
+
+---
+
+### 工具：
+Claude Code
+
+### 完成内容：
+
+**修复 Agent 栏消失 — 空指针 JS 异常（第 15 轮）：**
+
+**问题根因：**
+`app.js` 中 `document.getElementById("clearBtn")` 引用了已从 HTML 移除的元素，返回 `null` 后调用 `.addEventListener` 抛出 TypeError，导致整个 JS 执行中断，`renderAgentList()` 从未运行。
+
+**修复：**
+`undoBtn` 和 `clearBtn` 的事件绑定改为 null-safe 守卫模式。
+
+**文件改动：**
+- `app.js`：`undoBtn`/`clearBtn` 事件绑定加 null 检查（+8 行）
 
 ---
 

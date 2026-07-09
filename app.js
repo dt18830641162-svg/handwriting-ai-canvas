@@ -783,17 +783,30 @@
       const prefix = mode === "graft" ? `汇聚 ${parents.length} 个节点` : mode === "derive" ? "继续生成" : "识别手写";
       return `
         <p><span class="source-line">${prefix}：${escapeHtml(clean)}</span></p>
-        <ul><li>正在调用 ${agents[agentKey].name} 生成内容。</li></ul>
+        <div class="loading-spinner"></div>
+        <p style="text-align:center;color:var(--muted);font-size:12px;margin-top:8px">${agents[agentKey].name} 正在思考中…</p>
       `;
     }
 
     async function resolveGeneratedContent(agentKey, source, mode, parents) {
-      if (!serverOnline) return generateFallbackContent(agentKey, source, mode, parents);
+      if (!serverOnline) {
+        showToast("服务未连接，使用本地模拟内容");
+        return generateFallbackContent(agentKey, source, mode, parents);
+      }
       try {
         const text = await callModel(agentKey, source, mode, parents);
+        if (!text || text.trim().length === 0) {
+          showToast(`${agents[agentKey].name} 返回了空内容，使用本地模拟`);
+          return generateFallbackContent(agentKey, source, mode, parents);
+        }
         return renderModelText(text, agentKey, source, mode, parents);
       } catch (error) {
-        showToast(`API 调用失败，已回退到本地模拟：${error.message}`);
+        const msg = error.message.includes("fetch") || error.message.includes("Network")
+          ? "网络连接失败，请检查网络后重试"
+          : error.message.includes("503") || error.message.includes("502")
+            ? "AI 服务暂不可用，已使用本地模拟内容"
+            : `请求失败（${error.message}），已回退到本地模拟`;
+        showToast(msg);
         return generateFallbackContent(agentKey, source, mode, parents);
       }
     }
@@ -893,9 +906,14 @@
       `;
       uiLayer.appendChild(el);
       installNodeEvents(el);
+      el.classList.add("node-loading");
       resolveGeneratedContent(agentKey, source, mode, parents).then(html => {
         const body = el.querySelector(".node-body");
         if (body) body.innerHTML = html;
+        el.classList.remove("node-loading");
+      }).catch(() => {
+        el.classList.remove("node-loading");
+        el.classList.add("node-error");
       });
 
       parents.forEach(parentId => addLink(parentId, id));
@@ -1510,6 +1528,55 @@
       if (!isOpen) checkHealth();
     });
 
+    // ── 一键重置示例画布 ──
+    function resetToDemo() {
+      // 清除所有节点
+      document.querySelectorAll(".node").forEach(el => el.remove());
+      nodes = [];
+      selectedNodeId = null;
+      connectingFrom = null;
+      nodeId = 1;
+      // 清除所有连接
+      links = [];
+      linkId = 1;
+      saveLinks();
+      arrowLayer.innerHTML = "";
+      // 清除手写笔迹
+      strokes.forEach(s => s.path.remove());
+      strokes = [];
+      lassoSelections.forEach(s => s.path?.remove());
+      lassoSelections = [];
+      lassoPanel.style.display = "none";
+      lastLassoBox = null;
+      // 重置平移
+      resetView();
+      // 重新播种示例
+      seedDemo();
+      loadLinks();
+      closeArrowPanel();
+      document.getElementById("agentEditPanel").style.display = "none";
+      document.getElementById("textSelectPopup").style.display = "none";
+      showToast("画布已重置为示例状态");
+    }
+
+    const resetBtn = document.getElementById("resetDemoBtn");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", resetToDemo);
+    }
+
+    // ── 新手引导 ──
+    function showOnboarding() {
+      const seen = localStorage.getItem("inkscope_onboarding_seen");
+      if (seen) return;
+      document.getElementById("onboardingOverlay").style.display = "flex";
+    }
+
+    document.getElementById("closeOnboarding").addEventListener("click", () => {
+      document.getElementById("onboardingOverlay").style.display = "none";
+      localStorage.setItem("inkscope_onboarding_seen", "1");
+      showToast("开始使用吧！底部选钢笔书写，套索框选后点左侧 Agent");
+    });
+
     const undoEl = document.getElementById("undoBtn");
     if (undoEl) {
       undoEl.addEventListener("click", () => {
@@ -1659,4 +1726,5 @@
     updateReadout();
     seedDemo();
     loadLinks(); // 恢复之前保存的连接关系
+    showOnboarding(); // 首次访问显示引导
     showToast("用钢笔写字 → 套索框选 → 点击 Agent。拖拽节点右侧连接点可自由连线。");
